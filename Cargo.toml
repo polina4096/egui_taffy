@@ -1,0 +1,41 @@
+[package]
+name = "egui_tui"
+version = "0.1.0"
+edition = "2021"
+authors = ["Pēteris Pakalns"]
+repository = "https://github.com/PPakalns/egui_tui/"
+homepage = "https://github.com/PPakalns/egui_tui/"
+description = "Grid, Flexbox, Block layout support for egui using taffy"
+keywords = ["egui", "flexbox", "grid", "taffy", "block", "layout", "gui"]
+categories = ["gui"]
+license = "MIT"
+
+exclude = ["media/*"]
+
+[dependencies]
+egui = { version = "0.29", default-features = false }
+log = { version = "0.4", default-features = false }
+taffy = { version = "0.6.2", default-features = false, features = [
+  "taffy_tree",
+] }
+
+[features]
+default = ["taffy_default"]
+
+taffy_default = [
+  "taffy/block_layout",
+  "taffy/content_size",
+  "taffy/flexbox",
+  "taffy/grid",
+  "taffy/std",
+]
+
+[dev-dependencies]
+eframe = { version = "0.29", default-features = false, features = [
+  "wgpu",
+  "accesskit",
+  "default_fonts",
+  "wayland",
+  "web_screen_reader",
+  "x11",
+] }
