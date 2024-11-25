@@ -1,21 +1,21 @@
-# egui_tui: Egui Taffy Ui
+# egui_taffy: Egui Taffy Ui
 
 [![egui_version](https://img.shields.io/badge/egui-0.29-blue)](https://github.com/emilk/egui)
 [![taffy_version](https://img.shields.io/badge/taffy-0.6-blue)](https://github.com/DioxusLabs/taffy)
-[![Latest version](https://img.shields.io/crates/v/egui_tui.svg)](https://crates.io/crates/egui_flex)
-[![Documentation](https://docs.rs/egui_tui/badge.svg)](https://docs.rs/egui_tui)
+[![Latest version](https://img.shields.io/crates/v/egui_taffy.svg)](https://crates.io/crates/egui_taffy)
+[![Documentation](https://docs.rs/egui_taffy/badge.svg)](https://docs.rs/egui_taffy)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
-[![License](https://img.shields.io/crates/l/egui_flex.svg)](https://crates.io/crates/egui_tui)
+[![License](https://img.shields.io/crates/l/egui_taffy.svg)](https://crates.io/crates/egui_taffy)
 
 Flexible egui layout library that supports CSS Block, Flexbox, Grid layouts. It uses high-performance [taffy](https://github.com/DioxusLabs/taffy) library under the hood.
 
 ## Egui version compatibility
 
-| egui_tui | egui | taffy |
+| egui_taffy | egui | taffy |
 | ---      | ---  | ---   |
 | 0.1      | 0.29 | 0.6   | 
 
-To use add `egui_tui` to your project dependencies in `Cargo.toml` file.
+To use add `egui_taffy` to your project dependencies in `Cargo.toml` file.
 
 ## Examples
 

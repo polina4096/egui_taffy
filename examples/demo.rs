@@ -1,5 +1,5 @@
 use egui::Vec2b;
-use egui_tui::{tui, widgets::TaffySeparator, TuiBuilderLogic};
+use egui_taffy::{tui, widgets::TaffySeparator, TuiBuilderLogic};
 use taffy::{
     prelude::{auto, fr, length, percent, repeat, span},
     Style,
