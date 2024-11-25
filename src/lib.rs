@@ -689,8 +689,9 @@ pub struct TuiContainerResponse<T> {
 /// of the frame size. (The content will stay at it's intrinsic size while the frame will be
 /// stretched according to the flex layout.)
 ///
-/// If your widget has no frame, you don't need to implement this trait and can use
-/// [`TuiBuilder::add_simple``]
+/// If your widget has no frame, you can use [`TuiBuilderLogic::ui``] directly to implement this trait.
+///
+/// See [`crate::widgets`] and `./egui_widgets.rs` for example trait implementations.
 ///
 /// Trait idea taken from egui_flex
 pub trait TuiWidget {
@@ -916,7 +917,7 @@ where
 
     /// Add tui node as children to this node and draw custom background
     ///
-    /// See [`TuiBuilder::add_children_with_background`] for example
+    /// See [`TuiBuilderLogic::add_with_background`] for example
     fn add_with_background_ui<T>(
         self,
         content: impl FnOnce(&mut egui::Ui),
