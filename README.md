@@ -87,19 +87,19 @@ egui::Window::new("Flex wrap demo").show(ctx, |ui| {
 ```
 Preview:
 
-![Flex demo](./media/flex_wrap_demo.png)
-
-### Flex example
-
-![Flex demo](./media/flex_demo.png)
-
-#### Grow demo
-
-![Grow demo](./media/grow_demo.png)
+![flex_wrap_demo](https://github.com/user-attachments/assets/0d6ca8cd-dc5b-4f06-aa2e-5a9e5be69bfb)
 
 ### Grid example
 
-![Grid demo](./media/grid_demo.png)
+![grid_demo](https://github.com/user-attachments/assets/f72a73f1-c2d3-4d05-869a-84a334cede37)
+
+### Flex example
+
+![flex_demo](https://github.com/user-attachments/assets/7c46e66f-ca01-4dcb-97e6-d8e9a70cd8c7)
+
+#### Grow demo
+
+![grow_demo](https://github.com/user-attachments/assets/967f1de3-7918-46b8-9033-ab9c6928816e)
 
 ## Egui options
 
