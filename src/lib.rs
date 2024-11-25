@@ -707,7 +707,7 @@ pub trait TuiWidget {
 /// Id type to simplify defining layout node ids
 #[derive(Default)]
 pub enum TuiId {
-    /// Create id based on parent node id and given id  
+    /// Create id based on parent node id and given id
     ///
     /// This is useful to avoid duplicated ids if the same layout is used in multiple places
     Hiarchy(egui::Id),
@@ -871,7 +871,7 @@ where
     #[inline]
     fn mut_style(self, f: impl FnOnce(&mut taffy::Style)) -> TuiBuilder<'r, 'a> {
         let mut tui = self.tui();
-        f(tui.style.get_or_insert_default());
+        f(tui.style.get_or_insert_with(Default::default));
         tui
     }
 
