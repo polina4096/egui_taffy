@@ -6,11 +6,9 @@ authors = ["Pēteris Pakalns"]
 repository = "https://github.com/PPakalns/egui_tui/"
 homepage = "https://github.com/PPakalns/egui_tui/"
 description = "Grid, Flexbox, Block layout support for egui using taffy"
-keywords = ["egui", "flexbox", "grid", "taffy", "block", "layout", "gui"]
+keywords = ["egui", "flexbox", "taffy", "layout", "ui"]
 categories = ["gui"]
 license = "MIT"
-
-exclude = ["media/*"]
 
 [dependencies]
 egui = { version = "0.29", default-features = false }
