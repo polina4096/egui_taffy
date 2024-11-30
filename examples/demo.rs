@@ -1,5 +1,5 @@
 use egui::Vec2b;
-use egui_taffy::{tui, widgets::TaffySeparator, TuiBuilderLogic};
+use egui_taffy::{tui, TuiBuilderLogic};
 use taffy::{
     prelude::{auto, fr, length, percent, repeat, span},
     Style,
@@ -48,7 +48,7 @@ fn flex_wrap_demo(ctx: &egui::Context) {
                 // Add egui ui as nodes
                 tui.ui(|ui| {
                     ui.label("Hello from egui ui!");
-                    ui.button("Egui button");
+                    let _ = ui.button("Egui button");
                 });
 
                 // Add egui widgets directly to UI that implements [`TuiWidget`] trait
