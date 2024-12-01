@@ -886,6 +886,13 @@ where
         )
     }
 
+    /// Add empty tui node as children to this node
+    ///
+    /// Useful to fill grid cells with empty content
+    fn add_empty(self) {
+        self.tui().add(|_| {})
+    }
+
     /// Add tui node as children to this node and draw popup background
     fn add_with_background<T>(self, f: impl FnOnce(&mut Tui<'_>) -> T) -> T {
         self.add_with_background_ui(
@@ -1061,6 +1068,12 @@ where
     #[inline]
     fn heading(self, text: impl Into<egui::RichText>) -> Response {
         egui::Label::new(text.into().heading()).taffy_ui(self.tui())
+    }
+
+    /// Add egui small text as child node
+    #[inline]
+    fn small(self, text: impl Into<egui::RichText>) -> Response {
+        egui::Label::new(text.into().small()).taffy_ui(self.tui())
     }
 
     /// Add egui separator  as child node
