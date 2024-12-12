@@ -605,7 +605,7 @@ impl<'a> Tui<'a> {
 
     /// Access underlaying egui ui
     #[inline]
-    pub fn mut_egui_ui(&mut self) -> &mut egui::Ui {
+    pub fn egui_ui_mut(&mut self) -> &mut egui::Ui {
         &mut self.ui
     }
 
@@ -1052,10 +1052,12 @@ where
     fn add_scroll_area_with_background<T>(self, content: impl FnOnce(&mut Ui) -> T) -> T {
         let mut tui = self.tui();
         tui = tui.mut_style(|style| {
-            style.min_size = taffy::Size {
-                width: Dimension::Length(0.),
-                height: Dimension::Length(0.),
-            };
+            if style.min_size.height == Dimension::Auto {
+                style.min_size.height = Dimension::Length(0.);
+            }
+            if style.min_size.width == Dimension::Auto {
+                style.min_size.width = Dimension::Length(0.);
+            }
         });
 
         tui.add_with_background(move |tui| {
