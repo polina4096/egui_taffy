@@ -92,6 +92,10 @@ Preview:
 
 ![flex_wrap_demo](https://github.com/user-attachments/assets/0d6ca8cd-dc5b-4f06-aa2e-5a9e5be69bfb)
 
+### Button example
+
+![button_demo](https://github.com/user-attachments/assets/b15875d2-a92e-4dbc-8282-1d9d8fbc1565)
+
 ### Grid example
 
 ![grid_demo](https://github.com/user-attachments/assets/f72a73f1-c2d3-4d05-869a-84a334cede37)
