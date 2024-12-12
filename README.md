@@ -1,7 +1,7 @@
 # egui_taffy: Egui Taffy Ui
 
 [![egui_version](https://img.shields.io/badge/egui-0.29-blue)](https://github.com/emilk/egui)
-[![taffy_version](https://img.shields.io/badge/taffy-0.6-blue)](https://github.com/DioxusLabs/taffy)
+[![taffy_version](https://img.shields.io/badge/taffy-0.7-blue)](https://github.com/DioxusLabs/taffy)
 [![Latest version](https://img.shields.io/crates/v/egui_taffy.svg)](https://crates.io/crates/egui_taffy)
 [![Documentation](https://docs.rs/egui_taffy/badge.svg)](https://docs.rs/egui_taffy)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
