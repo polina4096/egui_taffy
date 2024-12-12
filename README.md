@@ -9,13 +9,16 @@
 
 Flexible egui layout library that supports CSS Block, Flexbox, Grid layouts. It uses high-performance [taffy](https://github.com/DioxusLabs/taffy) library under the hood.
 
-## Egui version compatibility
+## Version compatibility
 
 | egui_taffy | egui | taffy |
 | ---      | ---  | ---   |
+| 0.2      | 0.29 | 0.7   | 
 | 0.1      | 0.29 | 0.6   | 
 
 To use add `egui_taffy` to your project dependencies in `Cargo.toml` file.
+
+See [CHANGELOG](./CHANGELOG.md) for changes between versions.
 
 ## Examples
 
