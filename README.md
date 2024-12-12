@@ -103,6 +103,8 @@ Preview:
 
 ## Egui options
 
+### Max passes
+
 For best visual look you should enable egui multiple passes support so layout can be immediately recalculated upon some changes.
 
 ```rs
@@ -112,6 +114,20 @@ ctx.options_mut(|options| {
 ```
 
 If integrating with egui implementations such as `bevy_egui`, for egui multipass (request_discard) functionality to work you need to use special approach. See `bevy_egui` `simple_multipass` example for such case.
+
+### Text wrapping
+
+By default egui text wrapping tries to utilize as less width as possible. In dynamic layouts it results in text where letters are placed in a column.
+
+Instead you should use one of the following options:
+1. Specify minimal width or width for the elements, set text elements to fill width of the parent.
+2. Disable text wrapping:
+   ```rs
+   ctx.style_mut(|style| {
+     style.wrap_mode = Some(egui::TextWrapMode::Extend);
+   });
+   ```
+
 
 ## Inspiration
 

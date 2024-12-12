@@ -3,10 +3,11 @@
 #![doc = include_str!("../README.md")]
 
 use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use egui::util::IdTypeMap;
-use egui::{Pos2, Response, Ui};
+use egui::{Pos2, Response, Ui, UiBuilder};
 use taffy::prelude::*;
 use widgets::TaffySeparator;
 
@@ -146,7 +147,7 @@ impl<'a> TuiInitializer<'a> {
 pub struct Tui<'a> {
     main_id: egui::Id,
 
-    ui: &'a mut Ui,
+    ui: egui::Ui,
 
     current_id: egui::Id,
     current_node: Option<NodeId>,
@@ -162,6 +163,8 @@ pub struct Tui<'a> {
     /// Temporary default limit on scroll area size due to taffy
     /// being unable to shrink container to be smaller than content automatically
     limit_scroll_area_size: Option<f32>,
+
+    _ph: PhantomData<&'a ()>,
 }
 
 impl<'a> Tui<'a> {
@@ -189,6 +192,8 @@ impl<'a> Tui<'a> {
         style: Style,
         f: impl FnOnce(&mut Tui<'_>) -> T,
     ) -> TaffyReturn<T> {
+        let ui = ui.new_child(UiBuilder::new());
+
         let mut this = Self {
             main_id: id,
             ui,
@@ -201,6 +206,7 @@ impl<'a> Tui<'a> {
             available_space,
             current_id: id,
             limit_scroll_area_size: None,
+            _ph: PhantomData,
         };
 
         this.tui().id(id).style(style).add(|state| {
@@ -304,8 +310,8 @@ impl<'a> Tui<'a> {
             self.current_id = id;
         });
 
+        let max_rect = render_options.full_container();
         if let Some(content) = content {
-            let max_rect = render_options.full_container();
             if !max_rect.any_nan() {
                 let mut child_ui = self.ui.new_child(
                     egui::UiBuilder::new()
@@ -315,7 +321,16 @@ impl<'a> Tui<'a> {
                 content(&mut child_ui);
             }
         }
-        let resp = f(self);
+
+        let resp = {
+            let mut tmp_ui = self
+                .ui
+                .new_child(egui::UiBuilder::new().id_salt(id).max_rect(max_rect));
+            std::mem::swap(&mut tmp_ui, &mut self.ui);
+            let resp = f(self);
+            std::mem::swap(&mut tmp_ui, &mut self.ui);
+            resp
+        };
 
         Self::with_state(self.main_id, self.ui.ctx().clone(), |state| {
             let mut current_cnt = state.taffy.child_count(node_id);
@@ -584,8 +599,20 @@ impl<'a> Tui<'a> {
 
     /// Access underlaying egui ui
     #[inline]
-    pub fn egui_ui(&self) -> &&'a mut Ui {
+    pub fn egui_ui(&self) -> &egui::Ui {
         &self.ui
+    }
+
+    /// Access underlaying egui ui
+    #[inline]
+    pub fn mut_egui_ui(&mut self) -> &mut egui::Ui {
+        &mut self.ui
+    }
+
+    /// Modify underlaying egui style
+    #[inline]
+    pub fn egui_style_mut(&mut self) -> &mut egui::Style {
+        self.ui.style_mut()
     }
 
     /// Initial root rect size set by the user
@@ -593,12 +620,6 @@ impl<'a> Tui<'a> {
     /// (Used size in reality could change based on available space settings )
     pub fn root_rect(&self) -> egui::Rect {
         self.root_rect
-    }
-
-    /// Modify underlaying egui style
-    #[inline]
-    pub fn egui_style_mut(&mut self) -> &mut egui::Style {
-        self.ui.style_mut()
     }
 }
 
@@ -922,6 +943,98 @@ where
         )
     }
 
+    /// Add tui node with background that acts as egui button
+    #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
+    fn button<T>(self, f: impl FnOnce(&mut Tui<'_>) -> T) -> TuiInnerResponse<T> {
+        let tui = self.tui();
+        let data =
+            std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
+
+        let inner = tui.tui.add_children_inner(
+            tui.id,
+            tui.style.unwrap_or_default(),
+            Some(|ui: &mut egui::Ui| {
+                let available_space = ui.available_size();
+                let (id, rect) = ui.allocate_space(available_space);
+                let response = ui.interact(rect, id, egui::Sense::click());
+                let visuals = ui.style().interact(&response);
+
+                let painter = ui.painter();
+                painter.rect_filled(
+                    rect.expand(visuals.expansion),
+                    visuals.rounding,
+                    visuals.weak_bg_fill,
+                );
+                painter.rect_stroke(rect, visuals.rounding, visuals.bg_stroke);
+
+                *data.borrow_mut() = Some((*visuals, response));
+            }),
+            |tui| {
+                let data = data.borrow().as_ref().unwrap().0;
+                let egui_style = tui.egui_style_mut();
+                egui_style.interaction.selectable_labels = false;
+                egui_style.visuals.widgets.inactive = data;
+                egui_style.visuals.widgets.noninteractive = data;
+
+                f(tui)
+            },
+        );
+
+        let data = data.borrow_mut().take().unwrap();
+        TuiInnerResponse {
+            inner,
+            response: data.1,
+        }
+    }
+
+    /// Add tui node with background that acts as selectable button
+    #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
+    fn selectable<T>(
+        self,
+        selected: bool,
+        f: impl FnOnce(&mut Tui<'_>) -> T,
+    ) -> TuiInnerResponse<T> {
+        let tui = self.tui();
+        let data =
+            std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
+
+        let inner = tui.tui.add_children_inner(
+            tui.id,
+            tui.style.unwrap_or_default(),
+            Some(|ui: &mut egui::Ui| {
+                let available_space = ui.available_size();
+                let (id, rect) = ui.allocate_space(available_space);
+                let response = ui.interact(rect, id, egui::Sense::click());
+                let visuals = ui.style().interact_selectable(&response, selected);
+
+                let painter = ui.painter();
+                painter.rect_filled(
+                    rect.expand(visuals.expansion),
+                    visuals.rounding,
+                    visuals.weak_bg_fill,
+                );
+                painter.rect_stroke(rect, visuals.rounding, visuals.bg_stroke);
+
+                *data.borrow_mut() = Some((visuals, response));
+            }),
+            |tui| {
+                let data = data.borrow().as_ref().unwrap().0;
+                let egui_style = tui.egui_style_mut();
+                egui_style.interaction.selectable_labels = false;
+                egui_style.visuals.widgets.inactive = data;
+                egui_style.visuals.widgets.noninteractive = data;
+
+                f(tui)
+            },
+        );
+
+        let data = data.borrow_mut().take().unwrap();
+        TuiInnerResponse {
+            inner,
+            response: data.1,
+        }
+    }
+
     /// Add tui node as children to this node and draw custom background
     ///
     /// See [`TuiBuilderLogic::add_with_background`] for example
@@ -1082,3 +1195,28 @@ where
         TaffySeparator::default().taffy_ui(self.tui())
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+/// Helper structure to return:
+///     1. [`egui::Response`] of the surrounding element,
+///     2. return value of the inner closure.
+#[derive(Debug)]
+pub struct TuiInnerResponse<R> {
+    /// What the user closure returned.
+    pub inner: R,
+
+    /// The response of the area.
+    pub response: egui::Response,
+}
+
+impl<R> std::ops::Deref for TuiInnerResponse<R> {
+    type Target = egui::Response;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.response
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////

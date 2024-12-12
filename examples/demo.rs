@@ -7,12 +7,19 @@ use taffy::{
 
 fn main() -> eframe::Result {
     let mut grow_variables = None;
+    let mut button_variables = Default::default();
 
     eframe::run_simple_native("demo", Default::default(), move |ctx, _frame| {
+        // Enable multipass rendering upon request without drawing to screen
+        //
+        // View README for more details
         ctx.options_mut(|options| {
             options.max_passes = std::num::NonZeroUsize::new(3).unwrap();
         });
 
+        // Disable text wrapping
+        //
+        // egui text layouting tries to utilize minimal width possible
         ctx.style_mut(|style| {
             style.wrap_mode = Some(egui::TextWrapMode::Extend);
         });
@@ -24,6 +31,8 @@ fn main() -> eframe::Result {
         flex_wrap_demo(ctx);
 
         grow_demo(ctx, &mut grow_variables);
+
+        button_demo(ctx, &mut button_variables);
     })
 }
 
@@ -387,3 +396,105 @@ const FLEX_ITEMS: [&str; 18] = [
     "fringilla",
     "tortor",
 ];
+
+#[derive(Default)]
+struct ButtonParams {
+    counter: u32,
+    selected: bool,
+}
+
+fn button_demo(ctx: &egui::Context, params: &mut ButtonParams) {
+    egui::Window::new("Button demo")
+        .scroll(Vec2b { x: true, y: true })
+        .show(ctx, |ui| {
+            tui(ui, ui.id().with("button demo"))
+                .reserve_available_width()
+                .style(Style {
+                    flex_direction: taffy::FlexDirection::Column,
+                    min_size: taffy::Size {
+                        width: percent(1.),
+                        height: auto(),
+                    },
+                    align_items: Some(taffy::AlignItems::Stretch),
+                    max_size: percent(1.),
+                    gap: length(8.),
+                    padding: length(8.),
+                    ..Default::default()
+                })
+                .show(|tui| {
+                    let align_list = [
+                        taffy::AlignItems::Start,
+                        taffy::AlignItems::Center,
+                        taffy::AlignItems::End,
+                        taffy::AlignItems::Stretch,
+                    ];
+
+                    let response = tui
+                        .style(taffy::Style {
+                            flex_direction: taffy::FlexDirection::Column,
+                            align_items: Some(taffy::AlignItems::Center),
+                            padding: length(8.),
+                            ..Default::default()
+                        })
+                        .button(|tui| {
+                            tui.label("Button");
+
+                            for align_item in align_list {
+                                tui.style(Style {
+                                    flex_direction: taffy::FlexDirection::Column,
+                                    align_self: Some(align_item),
+                                    padding: length(4.),
+                                    ..Default::default()
+                                })
+                                .add(|tui| {
+                                    tui.style(taffy::Style {
+                                        align_self: Some(taffy::AlignItems::Center),
+                                        ..Default::default()
+                                    })
+                                    .label(format!("{:?}", align_item));
+                                });
+                            }
+                        });
+
+                    if response.clicked() {
+                        params.counter += 1;
+                    }
+
+                    tui.label(format!("Button clicked {} times", params.counter));
+
+                    tui.separator();
+
+                    let response = tui
+                        .style(taffy::Style {
+                            flex_direction: taffy::FlexDirection::Column,
+                            align_items: Some(taffy::AlignItems::Center),
+                            padding: length(8.),
+                            ..Default::default()
+                        })
+                        .selectable(params.selected, |tui| {
+                            tui.label("Selectable button");
+
+                            for align_item in align_list {
+                                tui.style(Style {
+                                    flex_direction: taffy::FlexDirection::Column,
+                                    align_self: Some(align_item),
+                                    padding: length(4.),
+                                    ..Default::default()
+                                })
+                                .add(|tui| {
+                                    tui.style(taffy::Style {
+                                        align_self: Some(taffy::AlignItems::Center),
+                                        ..Default::default()
+                                    })
+                                    .label(format!("{:?}", align_item));
+                                });
+                            }
+                        });
+                    if response.clicked() {
+                        params.selected = !params.selected;
+                    }
+
+                    tui.label(format!("Selected: {}", params.selected));
+                });
+        });
+}
