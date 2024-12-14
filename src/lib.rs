@@ -283,6 +283,7 @@ impl<'a> Tui<'a> {
         &'r mut self,
         id: TuiId,
         style: Style,
+        disabled: bool,
         content: Option<impl FnOnce(&mut egui::Ui)>,
         f: impl FnOnce(&mut Tui<'a>) -> T,
     ) -> T {
@@ -313,19 +314,34 @@ impl<'a> Tui<'a> {
         let max_rect = render_options.full_container();
         if let Some(content) = content {
             if !max_rect.any_nan() {
-                let mut child_ui = self.ui.new_child(
-                    egui::UiBuilder::new()
-                        .id_salt(id.with("background"))
-                        .max_rect(max_rect),
-                );
+                let builder = egui::UiBuilder::new()
+                    .id_salt(id.with("background"))
+                    .max_rect(max_rect);
+
+                let mut child_ui = self.ui.new_child(builder);
+
+                if disabled {
+                    // Can not set this in UiBuilder,
+                    // because it does not correctly set up color fade out for
+                    // disabled elements
+                    child_ui.disable();
+                }
+
                 content(&mut child_ui);
             }
         }
 
         let resp = {
-            let mut tmp_ui = self
-                .ui
-                .new_child(egui::UiBuilder::new().id_salt(id).max_rect(max_rect));
+            let builder = egui::UiBuilder::new().id_salt(id).max_rect(max_rect);
+            let mut tmp_ui = self.ui.new_child(builder);
+
+            if disabled {
+                // Can not set this in UiBuilder,
+                // because it does not correctly set up color fade out for
+                // disabled elements
+                tmp_ui.disable();
+            }
+
             std::mem::swap(&mut tmp_ui, &mut self.ui);
             let resp = f(self);
             std::mem::swap(&mut tmp_ui, &mut self.ui);
@@ -609,6 +625,20 @@ impl<'a> Tui<'a> {
         &mut self.ui
     }
 
+    /// Calling `disable()` will cause the [`egui::Ui`] to deny all future interaction
+    /// and all the widgets will draw with a gray look.
+    ///
+    /// Note that once disabled, there is no way to re-enable the [`egui::Ui`].
+    ///
+    /// Shorthand for
+    /// ```no_run
+    /// tui.egui_ui_mut().disable();
+    /// ```
+    #[inline]
+    pub fn disable(&mut self) {
+        self.egui_ui_mut().disable();
+    }
+
     /// Modify underlaying egui style
     #[inline]
     pub fn egui_style_mut(&mut self) -> &mut egui::Style {
@@ -620,6 +650,18 @@ impl<'a> Tui<'a> {
     /// (Used size in reality could change based on available space settings )
     pub fn root_rect(&self) -> egui::Rect {
         self.root_rect
+    }
+
+    /// Retrieve and clone current taffy style
+    ///
+    /// Useful when need to create child nodes with the same style
+    pub fn current_style(&self) -> taffy::Style {
+        Self::with_state(self.main_id, self.ui.ctx().clone(), |data| {
+            data.taffy
+                .style(self.current_node.unwrap())
+                .unwrap()
+                .clone()
+        })
     }
 }
 
@@ -811,6 +853,7 @@ where
     tui: &'r mut Tui<'a>,
     id: TuiId,
     style: Option<taffy::Style>,
+    disabled: bool,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -834,6 +877,7 @@ where
             tui: self,
             style: None,
             id: TuiId::Auto,
+            disabled: false,
         }
     }
 }
@@ -879,6 +923,13 @@ where
         tui
     }
 
+    /// Set child node style to be the same as current node style
+    fn reuse_style(self) -> TuiBuilder<'r, 'a> {
+        let mut tui = self.tui();
+        tui.style = Some(tui.tui.current_style());
+        tui
+    }
+
     /// Set child node id and style
     #[inline]
     fn id_style(self, id: impl Into<TuiId>, style: taffy::Style) -> TuiBuilder<'r, 'a> {
@@ -896,12 +947,31 @@ where
         tui
     }
 
+    /// Set child enabled_ui egui flag
+    #[inline]
+    fn enabled_ui(self, enabled_ui: bool) -> TuiBuilder<'r, 'a> {
+        let mut tui = self.tui();
+        tui.disabled |= !enabled_ui;
+        tui
+    }
+
+    /// Set child element to contain disabled [`egui::Ui`]
+    ///
+    /// See [`egui::Ui::disable`] for more information.
+    #[inline]
+    fn disabled(self) -> TuiBuilder<'r, 'a> {
+        let mut tui = self.tui();
+        tui.disabled = true;
+        tui
+    }
+
     /// Add tui node as children to this node
     fn add<T>(self, f: impl FnOnce(&mut Tui<'_>) -> T) -> T {
         let tui = self.tui();
         tui.tui.add_children_inner(
             tui.id,
             tui.style.unwrap_or_default(),
+            tui.disabled,
             Option::<fn(&mut egui::Ui)>::None,
             f,
         )
@@ -953,6 +1023,7 @@ where
         let inner = tui.tui.add_children_inner(
             tui.id,
             tui.style.unwrap_or_default(),
+            tui.disabled,
             Some(|ui: &mut egui::Ui| {
                 let available_space = ui.available_size();
                 let (id, rect) = ui.allocate_space(available_space);
@@ -1001,6 +1072,7 @@ where
         let inner = tui.tui.add_children_inner(
             tui.id,
             tui.style.unwrap_or_default(),
+            tui.disabled,
             Some(|ui: &mut egui::Ui| {
                 let available_space = ui.available_size();
                 let (id, rect) = ui.allocate_space(available_space);
@@ -1044,8 +1116,13 @@ where
         f: impl FnOnce(&mut Tui<'_>) -> T,
     ) -> T {
         let tui = self.tui();
-        tui.tui
-            .add_children_inner(tui.id, tui.style.unwrap_or_default(), Some(content), f)
+        tui.tui.add_children_inner(
+            tui.id,
+            tui.style.unwrap_or_default(),
+            tui.disabled,
+            Some(content),
+            f,
+        )
     }
 
     /// Add scroll area as leaf node and draw background for it

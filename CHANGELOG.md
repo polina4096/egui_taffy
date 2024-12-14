@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+* Correctly support child element/node disabling (egui::Ui disable).
+
 ## 0.2
 
 * Taffy updated to 0.7.
