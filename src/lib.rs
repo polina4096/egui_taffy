@@ -3,7 +3,6 @@
 #![doc = include_str!("../README.md")]
 
 use std::collections::{HashMap, HashSet};
-use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use egui::util::IdTypeMap;
@@ -115,7 +114,7 @@ impl<'a> TuiInitializer<'a> {
     }
 
     /// Show tui
-    pub fn show<T>(self, f: impl FnOnce(&mut Tui<'_>) -> T) -> T {
+    pub fn show<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let ui = self.ui;
         let output = Tui::create(
             ui,
@@ -144,7 +143,7 @@ impl<'a> TuiInitializer<'a> {
 }
 
 /// Tui (Egui Taffy UI) is used to place ui nodes and set their id, style configuration
-pub struct Tui<'a> {
+pub struct Tui {
     main_id: egui::Id,
 
     ui: egui::Ui,
@@ -163,11 +162,9 @@ pub struct Tui<'a> {
     /// Temporary default limit on scroll area size due to taffy
     /// being unable to shrink container to be smaller than content automatically
     limit_scroll_area_size: Option<f32>,
-
-    _ph: PhantomData<&'a ()>,
 }
 
-impl<'a> Tui<'a> {
+impl Tui {
     /// Retrieve stored layout information in egui memory
     fn with_state<T>(id: egui::Id, ctx: egui::Context, f: impl FnOnce(&mut TaffyState) -> T) -> T {
         let state = ctx.data_mut(|data: &mut IdTypeMap| {
@@ -185,12 +182,12 @@ impl<'a> Tui<'a> {
     /// Manually create Tui, user must manually allocate space in egui Ui if this method is used
     /// directly instead of helper method [`tui`]
     pub fn create<T>(
-        ui: &'a mut Ui,
+        ui: &mut Ui,
         id: egui::Id,
         root_rect: egui::Rect,
         available_space: Option<Size<AvailableSpace>>,
         style: Style,
-        f: impl FnOnce(&mut Tui<'_>) -> T,
+        f: impl FnOnce(&mut Tui) -> T,
     ) -> TaffyReturn<T> {
         let ui = ui.new_child(UiBuilder::new());
 
@@ -206,7 +203,6 @@ impl<'a> Tui<'a> {
             available_space,
             current_id: id,
             limit_scroll_area_size: None,
-            _ph: PhantomData,
         };
 
         this.tui().id(id).style(style).add(|state| {
@@ -279,13 +275,13 @@ impl<'a> Tui<'a> {
     }
 
     /// Add child taffy node to the layout with optional function to draw background
-    fn add_children_inner<'r, T>(
-        &'r mut self,
+    fn add_children_inner<T>(
+        &mut self,
         id: TuiId,
         style: Style,
         disabled: bool,
         content: Option<impl FnOnce(&mut egui::Ui)>,
-        f: impl FnOnce(&mut Tui<'a>) -> T,
+        f: impl FnOnce(&mut Tui) -> T,
     ) -> T {
         let id = id.resolve(self);
 
@@ -846,33 +842,31 @@ impl TaffyState {
 
 /// Helper structure to provide more egonomic API for child ui container creation
 #[must_use]
-pub struct TuiBuilder<'r, 'a>
-where
-    'a: 'r,
-{
-    tui: &'r mut Tui<'a>,
+pub struct TuiBuilder<'r> {
+    tui: &'r mut Tui,
     id: TuiId,
     style: Option<taffy::Style>,
     disabled: bool,
 }
 
+impl<'r> TuiBuilder<'r> {
+    /// Retrieve underlaying Tui used to initialize child element
+    pub fn builder_tui(&self) -> &&'r mut Tui {
+        &self.tui
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Helper trait to reduce code boilerplate
-pub trait AsTuiBuilder<'r, 'a>: Sized
-where
-    'a: 'r,
-{
+pub trait AsTuiBuilder<'r>: Sized {
     /// Initialize creation of tui new child node
-    fn tui(self) -> TuiBuilder<'r, 'a>;
+    fn tui(self) -> TuiBuilder<'r>;
 }
 
-impl<'r, 'a> AsTuiBuilder<'r, 'a> for &'r mut Tui<'a>
-where
-    'a: 'r,
-{
+impl<'r> AsTuiBuilder<'r> for &'r mut Tui {
     #[inline]
-    fn tui(self) -> TuiBuilder<'r, 'a> {
+    fn tui(self) -> TuiBuilder<'r> {
         TuiBuilder {
             tui: self,
             style: None,
@@ -882,20 +876,16 @@ where
     }
 }
 
-impl<'r, 'a> AsTuiBuilder<'r, 'a> for TuiBuilder<'r, 'a>
-where
-    'a: 'r,
-{
+impl<'r, 'a> AsTuiBuilder<'r> for TuiBuilder<'r> {
     #[inline]
-    fn tui(self) -> TuiBuilder<'r, 'a> {
+    fn tui(self) -> TuiBuilder<'r> {
         self
     }
 }
 
-impl<'r, 'a, T> TuiBuilderLogic<'r, 'a> for T
+impl<'r, T> TuiBuilderLogic<'r> for T
 where
-    T: AsTuiBuilder<'r, 'a>,
-    'a: 'r,
+    T: AsTuiBuilder<'r>,
 {
     // Use default implementation
 }
@@ -903,13 +893,10 @@ where
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Trait that implements TuiBuilder logic for child node creation in Tui UI.
-pub trait TuiBuilderLogic<'r, 'a>: AsTuiBuilder<'r, 'a> + Sized
-where
-    'a: 'r,
-{
+pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Set child node id
     #[inline]
-    fn id(self, id: impl Into<TuiId>) -> TuiBuilder<'r, 'a> {
+    fn id(self, id: impl Into<TuiId>) -> TuiBuilder<'r> {
         let mut tui = self.tui();
         tui.id = id.into();
         tui
@@ -917,14 +904,14 @@ where
 
     /// Set child node style
     #[inline]
-    fn style(self, style: taffy::Style) -> TuiBuilder<'r, 'a> {
+    fn style(self, style: taffy::Style) -> TuiBuilder<'r> {
         let mut tui = self.tui();
         tui.style = Some(style);
         tui
     }
 
     /// Set child node style to be the same as current node style
-    fn reuse_style(self) -> TuiBuilder<'r, 'a> {
+    fn reuse_style(self) -> TuiBuilder<'r> {
         let mut tui = self.tui();
         tui.style = Some(tui.tui.current_style());
         tui
@@ -932,7 +919,7 @@ where
 
     /// Set child node id and style
     #[inline]
-    fn id_style(self, id: impl Into<TuiId>, style: taffy::Style) -> TuiBuilder<'r, 'a> {
+    fn id_style(self, id: impl Into<TuiId>, style: taffy::Style) -> TuiBuilder<'r> {
         let mut tui = self.tui();
         tui.id = id.into();
         tui.style = Some(style);
@@ -941,7 +928,7 @@ where
 
     /// Mutate child node style
     #[inline]
-    fn mut_style(self, f: impl FnOnce(&mut taffy::Style)) -> TuiBuilder<'r, 'a> {
+    fn mut_style(self, f: impl FnOnce(&mut taffy::Style)) -> TuiBuilder<'r> {
         let mut tui = self.tui();
         f(tui.style.get_or_insert_with(Default::default));
         tui
@@ -949,7 +936,7 @@ where
 
     /// Set child enabled_ui egui flag
     #[inline]
-    fn enabled_ui(self, enabled_ui: bool) -> TuiBuilder<'r, 'a> {
+    fn enabled_ui(self, enabled_ui: bool) -> TuiBuilder<'r> {
         let mut tui = self.tui();
         tui.disabled |= !enabled_ui;
         tui
@@ -959,14 +946,14 @@ where
     ///
     /// See [`egui::Ui::disable`] for more information.
     #[inline]
-    fn disabled(self) -> TuiBuilder<'r, 'a> {
+    fn disabled(self) -> TuiBuilder<'r> {
         let mut tui = self.tui();
         tui.disabled = true;
         tui
     }
 
     /// Add tui node as children to this node
-    fn add<T>(self, f: impl FnOnce(&mut Tui<'_>) -> T) -> T {
+    fn add<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui();
         tui.tui.add_children_inner(
             tui.id,
@@ -985,7 +972,7 @@ where
     }
 
     /// Add tui node as children to this node and draw popup background
-    fn add_with_background<T>(self, f: impl FnOnce(&mut Tui<'_>) -> T) -> T {
+    fn add_with_background<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         self.add_with_background_ui(
             |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
@@ -1000,7 +987,7 @@ where
     }
 
     /// Add tui node as children to this node and draw simple group Frame background
-    fn add_with_border<T>(self, f: impl FnOnce(&mut Tui<'_>) -> T) -> T {
+    fn add_with_border<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         self.add_with_background_ui(
             |ui| {
                 egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -1015,7 +1002,7 @@ where
 
     /// Add tui node with background that acts as egui button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
-    fn button<T>(self, f: impl FnOnce(&mut Tui<'_>) -> T) -> TuiInnerResponse<T> {
+    fn button<T>(self, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
         let tui = self.tui();
         let data =
             std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
@@ -1060,11 +1047,7 @@ where
 
     /// Add tui node with background that acts as selectable button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
-    fn selectable<T>(
-        self,
-        selected: bool,
-        f: impl FnOnce(&mut Tui<'_>) -> T,
-    ) -> TuiInnerResponse<T> {
+    fn selectable<T>(self, selected: bool, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
         let tui = self.tui();
         let data =
             std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
@@ -1113,7 +1096,7 @@ where
     fn add_with_background_ui<T>(
         self,
         content: impl FnOnce(&mut egui::Ui),
-        f: impl FnOnce(&mut Tui<'_>) -> T,
+        f: impl FnOnce(&mut Tui) -> T,
     ) -> T {
         let tui = self.tui();
         tui.tui.add_children_inner(

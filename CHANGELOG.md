@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.2.2
+## 0.3
 
+* Removed lifetime requirement for `Tui`.
 * Added shorthand function for adding label with "strong" coloring. `tui.strong("label");`
 
 ## 0.2.1
