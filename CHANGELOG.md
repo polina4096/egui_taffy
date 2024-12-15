@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+* Added shorthand function for adding label with "strong" coloring. `tui.strong("label");`
+
 ## 0.2.1
 
 * Correctly support child element/node disabling (egui::Ui disable).

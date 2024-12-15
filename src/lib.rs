@@ -1256,6 +1256,12 @@ where
         egui::Label::new(text).taffy_ui(self.tui())
     }
 
+    /// Add label as child node with strong visual formatting
+    #[inline]
+    fn strong(self, text: impl Into<egui::RichText>) -> Response {
+        egui::Label::new(text.into().strong()).taffy_ui(self.tui())
+    }
+
     /// Add egui heading as child node
     #[inline]
     fn heading(self, text: impl Into<egui::RichText>) -> Response {
