@@ -2,8 +2,9 @@
 
 ## 0.3
 
-* Removed lifetime requirement for `Tui`.
+* Removed lifetime requirement for `Tui` (previously `Tui<'a>`).
 * Added shorthand function for adding label with "strong" coloring. `tui.strong("label");`
+* Added helper function to set wrap mode for child layout `tui.wrap_mode(egui::TextWrapMode::...).add(|tui| ...)`.
 
 ## 0.2.1
 

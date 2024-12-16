@@ -277,12 +277,19 @@ impl Tui {
     /// Add child taffy node to the layout with optional function to draw background
     fn add_children_inner<T>(
         &mut self,
-        id: TuiId,
-        style: Style,
-        disabled: bool,
+        params: TuiBuilderParams,
         content: Option<impl FnOnce(&mut egui::Ui)>,
         f: impl FnOnce(&mut Tui) -> T,
     ) -> T {
+        let TuiBuilderParams {
+            id,
+            style,
+            disabled,
+            wrap_mode,
+        } = params;
+
+        let style = style.unwrap_or_default();
+
         let id = id.resolve(self);
 
         let (node_id, render_options) = self.add_child_node(id, style);
@@ -315,6 +322,12 @@ impl Tui {
                     .max_rect(max_rect);
 
                 let mut child_ui = self.ui.new_child(builder);
+
+                if let Some(wrap_mode) = wrap_mode {
+                    if child_ui.style().wrap_mode != Some(wrap_mode) {
+                        child_ui.style_mut().wrap_mode = Some(wrap_mode);
+                    }
+                }
 
                 if disabled {
                     // Can not set this in UiBuilder,
@@ -368,13 +381,19 @@ impl Tui {
     /// Add egui user interface as child node in the Tui
     fn add_container<T>(
         &mut self,
-        id: impl Into<TuiId>,
-        style: taffy::Style,
+        params: TuiBuilderParams,
         content: impl FnOnce(&mut Ui, TaffyContainerUi) -> TuiContainerResponse<T>,
     ) -> T {
-        let id = id.into().resolve(self);
+        let TuiBuilderParams {
+            id,
+            style,
+            disabled,
+            wrap_mode,
+        } = params;
+        let id = id.resolve(self);
+        let style = style.unwrap_or_default();
 
-        let (nodeid, mut render_options) = self.add_child_node(id, style.clone());
+        let (nodeid, mut render_options) = self.add_child_node(id, style);
 
         let mut ui_builder = egui::UiBuilder::new()
             .max_rect(render_options.inner_container())
@@ -395,6 +414,17 @@ impl Tui {
         }
 
         let mut child_ui = self.ui.new_child(ui_builder);
+
+        if let Some(wrap_mode) = wrap_mode {
+            if child_ui.style().wrap_mode != Some(wrap_mode) {
+                child_ui.style_mut().wrap_mode = Some(wrap_mode);
+            }
+        }
+
+        if disabled {
+            child_ui.disable();
+        }
+
         let resp = content(&mut child_ui, render_options);
 
         Self::with_state(self.main_id, self.ui.ctx().clone(), |state| {
@@ -427,11 +457,18 @@ impl Tui {
     /// TODO: Add support for scroll area content to be handled in the same taffy tree
     fn add_scroll_area_ext<T>(
         &mut self,
-        id: impl Into<TuiId>,
-        mut style: taffy::Style,
+        params: TuiBuilderParams,
         limit: Option<f32>,
         content: impl FnOnce(&mut Ui) -> T,
     ) -> T {
+        let TuiBuilderParams {
+            id,
+            style,
+            disabled,
+            wrap_mode,
+        } = params;
+        let mut style = style.unwrap_or_default();
+
         style.overflow = taffy::Point {
             x: taffy::Overflow::Visible,
             y: taffy::Overflow::Hidden,
@@ -450,45 +487,48 @@ impl Tui {
                 *state.taffy.layout(tui.current_node.unwrap()).unwrap()
             });
 
-            let style = taffy::Style {
-                ..Default::default()
-            };
+            tui.add_container(
+                TuiBuilderParams {
+                    id: "inner".into(),
+                    style: None,
+                    ..params
+                },
+                |ui, _params| {
+                    let mut real_min_size = None;
+                    let scroll_area = egui::ScrollArea::both()
+                        .id_salt(ui.id().with("scroll_area"))
+                        .max_width(ui.available_width())
+                        .min_scrolled_width(layout.size.width)
+                        .max_width(layout.size.width)
+                        .min_scrolled_height(layout.size.height)
+                        .max_height(layout.size.height)
+                        .show(ui, |ui| {
+                            let resp = content(ui);
+                            real_min_size = Some(ui.min_size());
+                            resp
+                        });
 
-            tui.add_container("inner", style, |ui, _params| {
-                let mut real_min_size = None;
-                let scroll_area = egui::ScrollArea::both()
-                    .id_salt(ui.id().with("scroll_area"))
-                    .max_width(ui.available_width())
-                    .min_scrolled_width(layout.size.width)
-                    .max_width(layout.size.width)
-                    .min_scrolled_height(layout.size.height)
-                    .max_height(layout.size.height)
-                    .show(ui, |ui| {
-                        let resp = content(ui);
-                        real_min_size = Some(ui.min_size());
-                        resp
-                    });
+                    let potential_frame_size = scroll_area.content_size;
 
-                let potential_frame_size = scroll_area.content_size;
+                    // let min_size = egui::Vec2 {
+                    //     x: potential_frame_size.x,
+                    //     y: 0.3 * potential_frame_size.y,
+                    // };
+                    let max_size = egui::Vec2 {
+                        x: potential_frame_size.x,
+                        y: potential_frame_size.y,
+                    };
 
-                // let min_size = egui::Vec2 {
-                //     x: potential_frame_size.x,
-                //     y: 0.3 * potential_frame_size.y,
-                // };
-                let max_size = egui::Vec2 {
-                    x: potential_frame_size.x,
-                    y: potential_frame_size.y,
-                };
-
-                TuiContainerResponse {
-                    inner: scroll_area.inner,
-                    min_size: real_min_size.unwrap_or(max_size),
-                    intrinsic_size: None,
-                    max_size,
-                    infinite: egui::Vec2b::FALSE,
-                    scroll_area: true,
-                }
-            })
+                    TuiContainerResponse {
+                        inner: scroll_area.inner,
+                        min_size: real_min_size.unwrap_or(max_size),
+                        intrinsic_size: None,
+                        max_size,
+                        infinite: egui::Vec2b::FALSE,
+                        scroll_area: true,
+                    }
+                },
+            )
         })
     }
 
@@ -764,7 +804,7 @@ pub trait TuiWidget {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Id type to simplify defining layout node ids
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub enum TuiId {
     /// Create id based on parent node id and given id
     ///
@@ -844,9 +884,22 @@ impl TaffyState {
 #[must_use]
 pub struct TuiBuilder<'r> {
     tui: &'r mut Tui,
+    params: TuiBuilderParams,
+}
+
+#[derive(Clone)]
+struct TuiBuilderParams {
+    /// Child ui identifier to correctly match elements between frames
     id: TuiId,
+
+    /// Child element taffy layout settings / style
     style: Option<taffy::Style>,
+
+    /// Should child ui be disabled upon creation
     disabled: bool,
+
+    /// Setting to set child ui style wrap_mode
+    wrap_mode: Option<egui::TextWrapMode>,
 }
 
 impl<'r> TuiBuilder<'r> {
@@ -869,9 +922,12 @@ impl<'r> AsTuiBuilder<'r> for &'r mut Tui {
     fn tui(self) -> TuiBuilder<'r> {
         TuiBuilder {
             tui: self,
-            style: None,
-            id: TuiId::Auto,
-            disabled: false,
+            params: TuiBuilderParams {
+                id: TuiId::Auto,
+                style: None,
+                disabled: false,
+                wrap_mode: None,
+            },
         }
     }
 }
@@ -898,7 +954,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     #[inline]
     fn id(self, id: impl Into<TuiId>) -> TuiBuilder<'r> {
         let mut tui = self.tui();
-        tui.id = id.into();
+        tui.params.id = id.into();
         tui
     }
 
@@ -906,14 +962,14 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     #[inline]
     fn style(self, style: taffy::Style) -> TuiBuilder<'r> {
         let mut tui = self.tui();
-        tui.style = Some(style);
+        tui.params.style = Some(style);
         tui
     }
 
     /// Set child node style to be the same as current node style
     fn reuse_style(self) -> TuiBuilder<'r> {
         let mut tui = self.tui();
-        tui.style = Some(tui.tui.current_style());
+        tui.params.style = Some(tui.tui.current_style());
         tui
     }
 
@@ -921,8 +977,8 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     #[inline]
     fn id_style(self, id: impl Into<TuiId>, style: taffy::Style) -> TuiBuilder<'r> {
         let mut tui = self.tui();
-        tui.id = id.into();
-        tui.style = Some(style);
+        tui.params.id = id.into();
+        tui.params.style = Some(style);
         tui
     }
 
@@ -930,7 +986,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     #[inline]
     fn mut_style(self, f: impl FnOnce(&mut taffy::Style)) -> TuiBuilder<'r> {
         let mut tui = self.tui();
-        f(tui.style.get_or_insert_with(Default::default));
+        f(tui.params.style.get_or_insert_with(Default::default));
         tui
     }
 
@@ -938,7 +994,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     #[inline]
     fn enabled_ui(self, enabled_ui: bool) -> TuiBuilder<'r> {
         let mut tui = self.tui();
-        tui.disabled |= !enabled_ui;
+        tui.params.disabled |= !enabled_ui;
         tui
     }
 
@@ -948,20 +1004,23 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     #[inline]
     fn disabled(self) -> TuiBuilder<'r> {
         let mut tui = self.tui();
-        tui.disabled = true;
+        tui.params.disabled = true;
+        tui
+    }
+
+    /// Set child element wrap mode
+    #[inline]
+    fn wrap_mode(self, wrap_mode: egui::TextWrapMode) -> TuiBuilder<'r> {
+        let mut tui = self.tui();
+        tui.params.wrap_mode = Some(wrap_mode);
         tui
     }
 
     /// Add tui node as children to this node
     fn add<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui();
-        tui.tui.add_children_inner(
-            tui.id,
-            tui.style.unwrap_or_default(),
-            tui.disabled,
-            Option::<fn(&mut egui::Ui)>::None,
-            f,
-        )
+        tui.tui
+            .add_children_inner(tui.params, Option::<fn(&mut egui::Ui)>::None, f)
     }
 
     /// Add empty tui node as children to this node
@@ -1008,9 +1067,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
 
         let inner = tui.tui.add_children_inner(
-            tui.id,
-            tui.style.unwrap_or_default(),
-            tui.disabled,
+            tui.params,
             Some(|ui: &mut egui::Ui| {
                 let available_space = ui.available_size();
                 let (id, rect) = ui.allocate_space(available_space);
@@ -1053,9 +1110,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
 
         let inner = tui.tui.add_children_inner(
-            tui.id,
-            tui.style.unwrap_or_default(),
-            tui.disabled,
+            tui.params,
             Some(|ui: &mut egui::Ui| {
                 let available_space = ui.available_size();
                 let (id, rect) = ui.allocate_space(available_space);
@@ -1099,13 +1154,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         f: impl FnOnce(&mut Tui) -> T,
     ) -> T {
         let tui = self.tui();
-        tui.tui.add_children_inner(
-            tui.id,
-            tui.style.unwrap_or_default(),
-            tui.disabled,
-            Some(content),
-            f,
-        )
+        tui.tui.add_children_inner(tui.params, Some(content), f)
     }
 
     /// Add scroll area as leaf node and draw background for it
@@ -1147,8 +1196,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add scroll area as leaf node and provide custom limit for scroll area size
     fn add_scroll_area_ext<T>(self, limit: Option<f32>, content: impl FnOnce(&mut Ui) -> T) -> T {
         let tui = self.tui();
-        tui.tui
-            .add_scroll_area_ext(tui.id, tui.style.unwrap_or_default(), limit, content)
+        tui.tui.add_scroll_area_ext(tui.params, limit, content)
     }
 
     /// Add egui ui as tui leaf node
@@ -1196,8 +1244,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         content: impl FnOnce(&mut Ui, TaffyContainerUi) -> TuiContainerResponse<T>,
     ) -> T {
         let tui = self.tui();
-        tui.tui
-            .add_container(tui.id, tui.style.unwrap_or_default(), content)
+        tui.tui.add_container(tui.params, content)
     }
 
     /// Add tui or egui widget that implements [`TuiWidget`]` as leaf node
