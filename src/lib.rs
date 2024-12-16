@@ -667,7 +667,7 @@ impl Tui {
     /// Note that once disabled, there is no way to re-enable the [`egui::Ui`].
     ///
     /// Shorthand for
-    /// ```no_run
+    /// ```ignore
     /// tui.egui_ui_mut().disable();
     /// ```
     #[inline]
