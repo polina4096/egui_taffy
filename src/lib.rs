@@ -457,17 +457,11 @@ impl Tui {
     /// TODO: Add support for scroll area content to be handled in the same taffy tree
     fn add_scroll_area_ext<T>(
         &mut self,
-        params: TuiBuilderParams,
+        mut params: TuiBuilderParams,
         limit: Option<f32>,
         content: impl FnOnce(&mut Ui) -> T,
     ) -> T {
-        let TuiBuilderParams {
-            id,
-            style,
-            disabled,
-            wrap_mode,
-        } = params;
-        let mut style = style.unwrap_or_default();
+        let style = params.style.get_or_insert_default();
 
         style.overflow = taffy::Point {
             x: taffy::Overflow::Visible,
@@ -482,7 +476,8 @@ impl Tui {
             style.max_size.height = Dimension::Length(self.root_rect.height() * limit);
             style.max_size.width = Dimension::Length(self.root_rect.width() * limit);
         }
-        self.tui().id(id).style(style).add(|tui| {
+
+        self.tui().params(params).add(|tui| {
             let layout = Self::with_state(tui.main_id, tui.ui.ctx().clone(), |state| {
                 *state.taffy.layout(tui.current_node.unwrap()).unwrap()
             });
@@ -491,7 +486,8 @@ impl Tui {
                 TuiBuilderParams {
                     id: "inner".into(),
                     style: None,
-                    ..params
+                    disabled: false,
+                    wrap_mode: None,
                 },
                 |ui, _params| {
                     let mut real_min_size = None;
@@ -888,18 +884,18 @@ pub struct TuiBuilder<'r> {
 }
 
 #[derive(Clone)]
-struct TuiBuilderParams {
+pub struct TuiBuilderParams {
     /// Child ui identifier to correctly match elements between frames
-    id: TuiId,
+    pub id: TuiId,
 
     /// Child element taffy layout settings / style
-    style: Option<taffy::Style>,
+    pub style: Option<taffy::Style>,
 
     /// Should child ui be disabled upon creation
-    disabled: bool,
+    pub disabled: bool,
 
     /// Setting to set child ui style wrap_mode
-    wrap_mode: Option<egui::TextWrapMode>,
+    pub wrap_mode: Option<egui::TextWrapMode>,
 }
 
 impl<'r> TuiBuilder<'r> {
@@ -950,6 +946,14 @@ where
 
 /// Trait that implements TuiBuilder logic for child node creation in Tui UI.
 pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
+    /// Override all child element parameters with given values
+    #[inline]
+    fn params(self, params: TuiBuilderParams) -> TuiBuilder<'r> {
+        let mut tui = self.tui();
+        tui.params = params;
+        tui
+    }
+
     /// Set child node id
     #[inline]
     fn id(self, id: impl Into<TuiId>) -> TuiBuilder<'r> {
