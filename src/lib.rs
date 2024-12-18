@@ -286,6 +286,8 @@ impl Tui {
             style,
             disabled,
             wrap_mode,
+            egui_style,
+            layout,
         } = params;
 
         let style = style.unwrap_or_default();
@@ -317,11 +319,14 @@ impl Tui {
         let max_rect = render_options.full_container();
         if let Some(content) = content {
             if !max_rect.any_nan() {
-                let builder = egui::UiBuilder::new()
+                let mut ui_builder = egui::UiBuilder::new()
                     .id_salt(id.with("background"))
                     .max_rect(max_rect);
 
-                let mut child_ui = self.ui.new_child(builder);
+                ui_builder.style = egui_style.clone();
+                ui_builder.layout = layout.clone();
+
+                let mut child_ui = self.ui.new_child(ui_builder);
 
                 if let Some(wrap_mode) = wrap_mode {
                     if child_ui.style().wrap_mode != Some(wrap_mode) {
@@ -341,8 +346,11 @@ impl Tui {
         }
 
         let resp = {
-            let builder = egui::UiBuilder::new().id_salt(id).max_rect(max_rect);
-            let mut tmp_ui = self.ui.new_child(builder);
+            let mut ui_builder = egui::UiBuilder::new().id_salt(id).max_rect(max_rect);
+            ui_builder.style = egui_style;
+            ui_builder.layout = layout;
+
+            let mut tmp_ui = self.ui.new_child(ui_builder);
 
             if disabled {
                 // Can not set this in UiBuilder,
@@ -389,6 +397,8 @@ impl Tui {
             style,
             disabled,
             wrap_mode,
+            egui_style,
+            layout,
         } = params;
         let id = id.resolve(self);
         let style = style.unwrap_or_default();
@@ -397,11 +407,15 @@ impl Tui {
 
         let mut ui_builder = egui::UiBuilder::new()
             .max_rect(render_options.inner_container())
-            .id_salt(id.with("_ui"))
-            .layout(Default::default());
+            .id_salt(id.with("_ui"));
 
-        // Inner boxes are vertical by default
-        ui_builder.layout.as_mut().unwrap().main_dir = egui::Direction::TopDown;
+        // Use parent ui layout by default
+        //
+        // or set provided layout
+        ui_builder.layout = layout;
+
+        // Set custom egui style
+        ui_builder.style = egui_style;
 
         // TODO: Handle correctly case where max_rect has NaN values
         if ui_builder.max_rect.unwrap().any_nan() {
@@ -488,6 +502,8 @@ impl Tui {
                     style: None,
                     disabled: false,
                     wrap_mode: None,
+                    egui_style: None,
+                    layout: None,
                 },
                 |ui, _params| {
                     let mut real_min_size = None;
@@ -883,6 +899,7 @@ pub struct TuiBuilder<'r> {
     params: TuiBuilderParams,
 }
 
+/// Parameters for creating child element in Tui layout
 #[derive(Clone)]
 pub struct TuiBuilderParams {
     /// Child ui identifier to correctly match elements between frames
@@ -891,11 +908,17 @@ pub struct TuiBuilderParams {
     /// Child element taffy layout settings / style
     pub style: Option<taffy::Style>,
 
-    /// Should child ui be disabled upon creation
+    /// Should layout descendant egui ui be disabled upon creation
     pub disabled: bool,
 
     /// Setting to set child ui style wrap_mode
     pub wrap_mode: Option<egui::TextWrapMode>,
+
+    /// Egui style for child ui
+    pub egui_style: Option<Arc<egui::Style>>,
+
+    /// Layout for egui child ui
+    pub layout: Option<egui::Layout>,
 }
 
 impl<'r> TuiBuilder<'r> {
@@ -923,6 +946,8 @@ impl<'r> AsTuiBuilder<'r> for &'r mut Tui {
                 style: None,
                 disabled: false,
                 wrap_mode: None,
+                egui_style: None,
+                layout: None,
             },
         }
     }
@@ -1017,6 +1042,22 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     fn wrap_mode(self, wrap_mode: egui::TextWrapMode) -> TuiBuilder<'r> {
         let mut tui = self.tui();
         tui.params.wrap_mode = Some(wrap_mode);
+        tui
+    }
+
+    /// Set child element egui style
+    #[inline]
+    fn egui_style(self, style: Arc<egui::Style>) -> TuiBuilder<'r> {
+        let mut tui = self.tui();
+        tui.params.egui_style = Some(style);
+        tui
+    }
+
+    /// Set child element egui layout
+    #[inline]
+    fn egui_layout(self, layout: egui::Layout) -> TuiBuilder<'r> {
+        let mut tui = self.tui();
+        tui.params.layout = Some(layout);
         tui
     }
 
