@@ -324,7 +324,7 @@ impl Tui {
                     .max_rect(max_rect);
 
                 ui_builder.style = egui_style.clone();
-                ui_builder.layout = layout.clone();
+                ui_builder.layout = layout;
 
                 let mut child_ui = self.ui.new_child(ui_builder);
 
@@ -953,7 +953,7 @@ impl<'r> AsTuiBuilder<'r> for &'r mut Tui {
     }
 }
 
-impl<'r, 'a> AsTuiBuilder<'r> for TuiBuilder<'r> {
+impl<'r> AsTuiBuilder<'r> for TuiBuilder<'r> {
     #[inline]
     fn tui(self) -> TuiBuilder<'r> {
         self
