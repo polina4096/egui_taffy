@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4
+
+* Support egui 0.30
+
 ## 0.3
 
 Release adds support for more granular interaction with underlying `egui::Ui`.

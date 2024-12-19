@@ -146,7 +146,7 @@ This crate is inspired by [lucasmerlin](https://github.com/lucasmerlin) previous
 
 It combines ideas from both crates and builds upon them to provide easy to use egui like API to write your UI with modern layout support.
 
-It uses egui 0.30 new features intrinsic size and request_discard to request immediate frame redraw (without even drawing the current frame) if layout has changed.
+Library uses intrinsic size and request_discard egui functionality to measure layout and request immediate frame redraw (without even drawing the current frame) if layout has changed.
 
 ## Contributing
 
