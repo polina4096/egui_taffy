@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5
+
+Release adds support for scroll area, handling overflow css style.
+
+* Added overflow demo to examples for all overflow settings: Visible, Clip, Hidden, Scroll,.
+* Added support to hide or clip overflowing content using `taffy::Overflow::Clip`, `taffy::Overflow::Hidden`.
+* Automatically add `egui::ScrollArea` when overflow: `taffy::Overflow:Scroll` is set.
+* `add_with_border` now sets border_size value in taffy::Style if border size was set to default value (`Rect::zero()`).
+
 ## 0.4
 
 * Support egui 0.30

@@ -13,6 +13,7 @@ Flexible egui layout library that supports CSS Block, Flexbox, Grid layouts. It 
 
 | egui_taffy | egui | taffy |
 | ---      | ---  | ---   |
+| 0.5 (dev)| 0.30 | 0.7   |
 | 0.4      | 0.30 | 0.7   |
 | 0.3      | 0.29 | 0.7   | 
 | 0.2      | 0.29 | 0.7   | 

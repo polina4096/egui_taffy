@@ -278,7 +278,7 @@ impl Tui {
     fn add_children_inner<T>(
         &mut self,
         params: TuiBuilderParams,
-        content: Option<impl FnOnce(&mut egui::Ui)>,
+        content: Option<impl FnOnce(&mut egui::Ui, &TaffyContainerUi)>,
         f: impl FnOnce(&mut Tui, TaffyContainerUi) -> T,
     ) -> T {
         let TuiBuilderParams {
@@ -294,7 +294,9 @@ impl Tui {
 
         let id = id.resolve(self);
 
-        let (node_id, render_options) = self.add_child_node(id, style);
+        let overflow_style = style.overflow;
+
+        let (node_id, taffy_container) = self.add_child_node(id, style);
 
         let stored_id = self.current_id;
         let stored_node = self.current_node;
@@ -307,7 +309,7 @@ impl Tui {
             self.current_node_index = 0;
             self.last_child_count = state.taffy.child_count(node_id);
 
-            let max_rect = render_options.full_container();
+            let max_rect = taffy_container.full_container();
             self.parent_rect = if max_rect.any_nan() {
                 self.parent_rect
             } else {
@@ -316,12 +318,13 @@ impl Tui {
             self.current_id = id;
         });
 
-        let max_rect = render_options.full_container();
+        let full_container_max_rect = taffy_container.full_container();
+
         if let Some(content) = content {
-            if !max_rect.any_nan() {
+            if !full_container_max_rect.any_nan() {
                 let mut ui_builder = egui::UiBuilder::new()
                     .id_salt(id.with("background"))
-                    .max_rect(max_rect);
+                    .max_rect(full_container_max_rect);
 
                 ui_builder.style = egui_style.clone();
                 ui_builder.layout = layout;
@@ -341,12 +344,15 @@ impl Tui {
                     child_ui.disable();
                 }
 
-                content(&mut child_ui);
+                content(&mut child_ui, &taffy_container);
             }
         }
 
         let resp = {
-            let mut ui_builder = egui::UiBuilder::new().id_salt(id).max_rect(max_rect);
+            let full_container_without_border = taffy_container.full_container_without_border();
+            let mut ui_builder = egui::UiBuilder::new()
+                .id_salt(id)
+                .max_rect(full_container_without_border);
             ui_builder.style = egui_style;
             ui_builder.layout = layout;
 
@@ -365,10 +371,74 @@ impl Tui {
                 }
             }
 
-            std::mem::swap(&mut tmp_ui, &mut self.ui);
-            let resp = f(self, render_options);
-            std::mem::swap(&mut tmp_ui, &mut self.ui);
-            resp
+            let mut scroll_in_directions = egui::Vec2b::FALSE;
+            match overflow_style.y {
+                taffy::Overflow::Visible => {
+                    // Do nothing
+                }
+                taffy::Overflow::Clip | taffy::Overflow::Hidden | taffy::Overflow::Scroll => {
+                    // Add scroll area
+                    if overflow_style.y == taffy::Overflow::Scroll {
+                        scroll_in_directions.y = true;
+                    }
+                    // Hide overflow
+                    let mut clip_rect = tmp_ui.clip_rect();
+                    clip_rect.min.y = full_container_without_border.min.y;
+                    clip_rect.max.y = full_container_without_border.max.y;
+                    tmp_ui.shrink_clip_rect(clip_rect);
+                }
+            }
+
+            match overflow_style.y {
+                taffy::Overflow::Visible => {
+                    // Do nothing
+                }
+                taffy::Overflow::Clip | taffy::Overflow::Hidden | taffy::Overflow::Scroll => {
+                    // Add scroll area
+                    if overflow_style.x == taffy::Overflow::Scroll {
+                        scroll_in_directions.x = true;
+                    }
+
+                    // Hide overflow
+                    let mut clip_rect = tmp_ui.clip_rect();
+                    clip_rect.min.x = full_container_without_border.min.x;
+                    clip_rect.max.x = full_container_without_border.max.x;
+                    tmp_ui.shrink_clip_rect(clip_rect);
+                }
+            }
+
+            if scroll_in_directions.any() {
+                let scroll = egui::ScrollArea::new(scroll_in_directions)
+                    .min_scrolled_width(full_container_without_border.width())
+                    .max_width(full_container_without_border.width())
+                    .min_scrolled_height(full_container_without_border.height())
+                    .max_height(full_container_without_border.height())
+                    .show(&mut tmp_ui, |ui| {
+                        // Allocate expected size for scroll area to correctly calculate inner size
+                        let content_size = taffy_container.layout.content_size;
+                        let (mut rect, _resp) = ui.allocate_exact_size(
+                            // TODO: Fix -1 workaround
+                            // -1 due to unknown bug in calculation and redundant scrollbar
+                            // Maybe egui rounds something. See scrollbar demo.
+                            egui::Vec2::new(content_size.width - 1., content_size.height - 1.)
+                                .max(egui::Vec2::ZERO),
+                            egui::Sense::hover(),
+                        );
+
+                        std::mem::swap(&mut self.parent_rect, &mut rect);
+                        std::mem::swap(ui, &mut self.ui);
+                        let resp = f(self, taffy_container);
+                        std::mem::swap(ui, &mut self.ui);
+                        std::mem::swap(&mut self.parent_rect, &mut rect);
+                        resp
+                    });
+                scroll.inner
+            } else {
+                std::mem::swap(&mut tmp_ui, &mut self.ui);
+                let resp = f(self, taffy_container);
+                std::mem::swap(&mut tmp_ui, &mut self.ui);
+                resp
+            }
         };
 
         Self::with_state(self.main_id, self.ui.ctx().clone(), |state| {
@@ -398,42 +468,46 @@ impl Tui {
         params: TuiBuilderParams,
         content: impl FnOnce(&mut Ui, TaffyContainerUi) -> TuiContainerResponse<T>,
     ) -> T {
-        self.add_children_inner(params, None::<fn(&mut egui::Ui)>, |tui, render_options| {
-            let child_ui = &mut tui.ui;
+        self.add_children_inner(
+            params,
+            None::<fn(&mut egui::Ui, &TaffyContainerUi)>,
+            |tui, taffy_container| {
+                let child_ui = &mut tui.ui;
 
-            if render_options.first_frame {
-                child_ui.set_invisible();
-            }
-
-            let resp = content(child_ui, render_options);
-
-            let nodeid = tui.current_node.unwrap();
-
-            Self::with_state(tui.main_id, tui.ui.ctx().clone(), |state| {
-                let min_size = if let Some(intrinsic_size) = resp.intrinsic_size {
-                    resp.min_size.min(intrinsic_size).ceil()
-                } else {
-                    resp.min_size.ceil()
-                };
-
-                let mut max_size = resp.max_size;
-                max_size = max_size.max(min_size);
-
-                let new_content = Context {
-                    min_size,
-                    max_size,
-                    infinite: resp.infinite,
-                };
-                if state.taffy.get_node_context(nodeid) != Some(&new_content) {
-                    state
-                        .taffy
-                        .set_node_context(nodeid, Some(new_content))
-                        .unwrap();
+                if taffy_container.first_frame {
+                    child_ui.set_invisible();
                 }
-            });
 
-            resp.inner
-        })
+                let resp = content(child_ui, taffy_container);
+
+                let nodeid = tui.current_node.unwrap();
+
+                Self::with_state(tui.main_id, tui.ui.ctx().clone(), |state| {
+                    let min_size = if let Some(intrinsic_size) = resp.intrinsic_size {
+                        resp.min_size.min(intrinsic_size).ceil()
+                    } else {
+                        resp.min_size.ceil()
+                    };
+
+                    let mut max_size = resp.max_size;
+                    max_size = max_size.max(min_size);
+
+                    let new_content = Context {
+                        min_size,
+                        max_size,
+                        infinite: resp.infinite,
+                    };
+                    if state.taffy.get_node_context(nodeid) != Some(&new_content) {
+                        state
+                            .taffy
+                            .set_node_context(nodeid, Some(new_content))
+                            .unwrap();
+                    }
+                });
+
+                resp.inner
+            },
+        )
     }
 
     /// Add scroll area node to the taffy layout
@@ -710,6 +784,20 @@ pub struct TaffyContainerUi {
     first_frame: bool,
 }
 
+fn sum_axis(rect: &taffy::Rect<f32>) -> taffy::Size<f32> {
+    taffy::Size {
+        width: rect.left + rect.right,
+        height: rect.top + rect.bottom,
+    }
+}
+
+fn top_left(rect: &taffy::Rect<f32>) -> taffy::Point<f32> {
+    taffy::Point {
+        x: rect.left,
+        y: rect.top,
+    }
+}
+
 impl TaffyContainerUi {
     /// Full container size
     pub fn full_container(&self) -> egui::Rect {
@@ -721,24 +809,47 @@ impl TaffyContainerUi {
         rect.translate(self.parent_rect.min.to_vec2())
     }
 
-    /// Container from which padding has been removed
-    pub fn inner_container(&self) -> egui::Rect {
+    /// Full container rect without border
+    pub fn full_container_without_border(&self) -> egui::Rect {
         let layout = &self.layout;
 
-        let size = layout.size
-            - Size {
-                width: layout.padding.left + layout.padding.right,
-                height: layout.padding.top + layout.padding.bottom,
-            };
+        let pos = layout.location + top_left(&layout.border);
+        let size = layout.size - sum_axis(&layout.border);
 
         let rect = egui::Rect::from_min_size(
-            Pos2::new(
-                layout.location.x + layout.padding.left,
-                layout.location.y + layout.padding.top,
-            ),
+            Pos2::new(pos.x, pos.y),
             egui::Vec2::new(size.width, size.height),
         );
         rect.translate(self.parent_rect.min.to_vec2())
+    }
+
+    /// Full container rect without border and padding
+    pub fn full_container_without_border_and_padding(&self) -> egui::Rect {
+        let layout = &self.layout;
+
+        let pos = layout.location + top_left(&layout.padding) + top_left(&layout.border);
+        let size = layout.size - sum_axis(&layout.padding) - sum_axis(&layout.border);
+
+        let rect = egui::Rect::from_min_size(
+            Pos2::new(pos.x, pos.y),
+            egui::Vec2::new(size.width, size.height),
+        );
+        rect.translate(self.parent_rect.min.to_vec2())
+    }
+
+    /// Calculated taffy::Layout for this node
+    pub fn layout(&self) -> &Layout {
+        &self.layout
+    }
+
+    /// Is this the first frame. Content may be invisible to avoid flickering
+    pub fn first_frame(&self) -> bool {
+        self.first_frame
+    }
+
+    /// Parent rect that is used to calculate rect of this node
+    pub fn parent_rect(&self) -> egui::Rect {
+        self.parent_rect
     }
 }
 
@@ -1034,10 +1145,11 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add tui node as children to this node
     fn add<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui();
-        tui.tui
-            .add_children_inner(tui.params, Option::<fn(&mut egui::Ui)>::None, |tui, _| {
-                f(tui)
-            })
+        tui.tui.add_children_inner(
+            tui.params,
+            Option::<fn(&mut egui::Ui, &TaffyContainerUi)>::None,
+            |tui, _| f(tui),
+        )
     }
 
     /// Add empty tui node as children to this node
@@ -1050,7 +1162,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add tui node as children to this node and draw popup background
     fn add_with_background<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         self.add_with_background_ui(
-            |ui| {
+            |ui, _| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     let available_space = ui.available_size();
                     let (id, rect) = ui.allocate_space(available_space);
@@ -1064,13 +1176,25 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
     /// Add tui node as children to this node and draw simple group Frame background
     fn add_with_border<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
-        self.add_with_background_ui(
-            |ui| {
-                egui::Frame::group(ui.style()).show(ui, |ui| {
-                    let available_space = ui.available_size();
-                    let (_id, _rect) = ui.allocate_space(available_space);
-                    // Background is transparent to events
-                });
+        let tui = self.tui();
+        let border = tui.tui.egui_ui().style().noninteractive().bg_stroke.width;
+        let tui = tui.mut_style(|style| {
+            // Allocate space for border in layout
+            if style.border == Rect::zero() {
+                style.border = length(border);
+            }
+        });
+        tui.add_with_background_ui(
+            |ui, container| {
+                let noninteractive = ui.style().noninteractive();
+                let max_rect = container.full_container();
+
+                // Background is transparent to events
+                ui.painter().rect_stroke(
+                    max_rect,
+                    noninteractive.rounding,
+                    noninteractive.bg_stroke,
+                );
             },
             f,
         )
@@ -1085,7 +1209,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
         let inner = tui.tui.add_children_inner(
             tui.params,
-            Some(|ui: &mut egui::Ui| {
+            Some(|ui: &mut egui::Ui, _: &TaffyContainerUi| {
                 let available_space = ui.available_size();
                 let (id, rect) = ui.allocate_space(available_space);
                 let response = ui.interact(rect, id, egui::Sense::click());
@@ -1128,7 +1252,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
         let inner = tui.tui.add_children_inner(
             tui.params,
-            Some(|ui: &mut egui::Ui| {
+            Some(|ui: &mut egui::Ui, _: &TaffyContainerUi| {
                 let available_space = ui.available_size();
                 let (id, rect) = ui.allocate_space(available_space);
                 let response = ui.interact(rect, id, egui::Sense::click());
@@ -1167,7 +1291,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// See [`TuiBuilderLogic::add_with_background`] for example
     fn add_with_background_ui<T>(
         self,
-        content: impl FnOnce(&mut egui::Ui),
+        content: impl FnOnce(&mut egui::Ui, &TaffyContainerUi),
         f: impl FnOnce(&mut Tui) -> T,
     ) -> T {
         let tui = self.tui();

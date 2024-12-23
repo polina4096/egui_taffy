@@ -2,7 +2,7 @@ use egui::Vec2b;
 use egui_taffy::{tui, TuiBuilderLogic};
 use taffy::{
     prelude::{auto, fr, length, percent, repeat, span},
-    Style,
+    Overflow, Style,
 };
 
 fn main() -> eframe::Result {
@@ -33,6 +33,8 @@ fn main() -> eframe::Result {
         grow_demo(ctx, &mut grow_variables);
 
         button_demo(ctx, &mut button_variables);
+
+        overflow_demo(ctx);
     })
 }
 
@@ -495,6 +497,49 @@ fn button_demo(ctx: &egui::Context, params: &mut ButtonParams) {
                     }
 
                     tui.label(format!("Selected: {}", params.selected));
+                });
+        });
+}
+
+fn overflow_demo(ctx: &egui::Context) {
+    egui::Window::new("Overflow demo")
+        .scroll(Vec2b { x: true, y: true })
+        .show(ctx, |ui| {
+            tui(ui, ui.id().with("overflow demo"))
+                .reserve_available_width()
+                .style(Style {
+                    flex_direction: taffy::FlexDirection::Row,
+                    align_items: Some(taffy::AlignItems::Center),
+                    gap: length(16.),
+                    ..Default::default()
+                })
+                .show(|tui| {
+                    for overflow in [
+                        taffy::Overflow::Visible,
+                        taffy::Overflow::Clip,
+                        taffy::Overflow::Hidden,
+                        taffy::Overflow::Scroll,
+                    ] {
+                        tui.style(taffy::Style {
+                            flex_direction: taffy::FlexDirection::Column,
+                            overflow: taffy::Point {
+                                x: Overflow::default(),
+                                y: overflow,
+                            },
+                            max_size: taffy::Size {
+                                height: length(200.),
+                                width: auto(),
+                            },
+                            padding: length(12.),
+                            ..Default::default()
+                        })
+                        .add_with_border(|tui| {
+                            let label = format!("{:?}", overflow);
+                            for _ in 0..50 {
+                                tui.label(&label);
+                            }
+                        });
+                    }
                 });
         });
 }
