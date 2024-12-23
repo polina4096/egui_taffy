@@ -279,7 +279,7 @@ impl Tui {
         &mut self,
         params: TuiBuilderParams,
         content: Option<impl FnOnce(&mut egui::Ui)>,
-        f: impl FnOnce(&mut Tui) -> T,
+        f: impl FnOnce(&mut Tui, TaffyContainerUi) -> T,
     ) -> T {
         let TuiBuilderParams {
             id,
@@ -359,8 +359,14 @@ impl Tui {
                 tmp_ui.disable();
             }
 
+            if let Some(wrap_mode) = wrap_mode {
+                if tmp_ui.style().wrap_mode != Some(wrap_mode) {
+                    tmp_ui.style_mut().wrap_mode = Some(wrap_mode);
+                }
+            }
+
             std::mem::swap(&mut tmp_ui, &mut self.ui);
-            let resp = f(self);
+            let resp = f(self, render_options);
             std::mem::swap(&mut tmp_ui, &mut self.ui);
             resp
         };
@@ -392,78 +398,42 @@ impl Tui {
         params: TuiBuilderParams,
         content: impl FnOnce(&mut Ui, TaffyContainerUi) -> TuiContainerResponse<T>,
     ) -> T {
-        let TuiBuilderParams {
-            id,
-            style,
-            disabled,
-            wrap_mode,
-            egui_style,
-            layout,
-        } = params;
-        let id = id.resolve(self);
-        let style = style.unwrap_or_default();
+        self.add_children_inner(params, None::<fn(&mut egui::Ui)>, |tui, render_options| {
+            let child_ui = &mut tui.ui;
 
-        let (nodeid, mut render_options) = self.add_child_node(id, style);
-
-        let mut ui_builder = egui::UiBuilder::new()
-            .max_rect(render_options.inner_container())
-            .id_salt(id.with("_ui"));
-
-        // Use parent ui layout by default
-        //
-        // or set provided layout
-        ui_builder.layout = layout;
-
-        // Set custom egui style
-        ui_builder.style = egui_style;
-
-        // TODO: Handle correctly case where max_rect has NaN values
-        if ui_builder.max_rect.unwrap().any_nan() {
-            render_options.first_frame = true;
-            ui_builder = ui_builder.max_rect(self.parent_rect);
-        }
-
-        if render_options.first_frame {
-            ui_builder = ui_builder.sizing_pass().invisible();
-        }
-
-        let mut child_ui = self.ui.new_child(ui_builder);
-
-        if let Some(wrap_mode) = wrap_mode {
-            if child_ui.style().wrap_mode != Some(wrap_mode) {
-                child_ui.style_mut().wrap_mode = Some(wrap_mode);
+            if render_options.first_frame {
+                child_ui.set_invisible();
             }
-        }
 
-        if disabled {
-            child_ui.disable();
-        }
+            let resp = content(child_ui, render_options);
 
-        let resp = content(&mut child_ui, render_options);
+            let nodeid = tui.current_node.unwrap();
 
-        Self::with_state(self.main_id, self.ui.ctx().clone(), |state| {
-            let min_size = if let Some(intrinsic_size) = resp.intrinsic_size {
-                resp.min_size.min(intrinsic_size).ceil()
-            } else {
-                resp.min_size.ceil()
-            };
+            Self::with_state(tui.main_id, tui.ui.ctx().clone(), |state| {
+                let min_size = if let Some(intrinsic_size) = resp.intrinsic_size {
+                    resp.min_size.min(intrinsic_size).ceil()
+                } else {
+                    resp.min_size.ceil()
+                };
 
-            let mut max_size = resp.max_size;
-            max_size = max_size.max(min_size);
+                let mut max_size = resp.max_size;
+                max_size = max_size.max(min_size);
 
-            let new_content = Context {
-                min_size,
-                max_size,
-                infinite: resp.infinite,
-            };
-            if state.taffy.get_node_context(nodeid) != Some(&new_content) {
-                state
-                    .taffy
-                    .set_node_context(nodeid, Some(new_content))
-                    .unwrap();
-            }
-        });
-        resp.inner
+                let new_content = Context {
+                    min_size,
+                    max_size,
+                    infinite: resp.infinite,
+                };
+                if state.taffy.get_node_context(nodeid) != Some(&new_content) {
+                    state
+                        .taffy
+                        .set_node_context(nodeid, Some(new_content))
+                        .unwrap();
+                }
+            });
+
+            resp.inner
+        })
     }
 
     /// Add scroll area node to the taffy layout
@@ -1065,7 +1035,9 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     fn add<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui();
         tui.tui
-            .add_children_inner(tui.params, Option::<fn(&mut egui::Ui)>::None, f)
+            .add_children_inner(tui.params, Option::<fn(&mut egui::Ui)>::None, |tui, _| {
+                f(tui)
+            })
     }
 
     /// Add empty tui node as children to this node
@@ -1129,7 +1101,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
                 *data.borrow_mut() = Some((*visuals, response));
             }),
-            |tui| {
+            |tui, _| {
                 let data = data.borrow().as_ref().unwrap().0;
                 let egui_style = tui.egui_style_mut();
                 egui_style.interaction.selectable_labels = false;
@@ -1172,7 +1144,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
                 *data.borrow_mut() = Some((visuals, response));
             }),
-            |tui| {
+            |tui, _| {
                 let data = data.borrow().as_ref().unwrap().0;
                 let egui_style = tui.egui_style_mut();
                 egui_style.interaction.selectable_labels = false;
@@ -1199,7 +1171,8 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         f: impl FnOnce(&mut Tui) -> T,
     ) -> T {
         let tui = self.tui();
-        tui.tui.add_children_inner(tui.params, Some(content), f)
+        tui.tui
+            .add_children_inner(tui.params, Some(content), |tui, _| f(tui))
     }
 
     /// Add scroll area as leaf node and draw background for it
