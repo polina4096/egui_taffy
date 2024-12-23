@@ -472,13 +472,14 @@ impl Tui {
             params,
             None::<fn(&mut egui::Ui, &TaffyContainerUi)>,
             |tui, taffy_container| {
-                let child_ui = &mut tui.ui;
-
+                let mut ui_builder = UiBuilder::new()
+                    .max_rect(taffy_container.full_container_without_border_and_padding());
                 if taffy_container.first_frame {
-                    child_ui.set_invisible();
+                    ui_builder = ui_builder.sizing_pass().invisible();
                 }
+                let mut child_ui = tui.ui.new_child(ui_builder);
 
-                let resp = content(child_ui, taffy_container);
+                let resp = content(&mut child_ui, taffy_container);
 
                 let nodeid = tui.current_node.unwrap();
 
@@ -840,7 +841,7 @@ impl TaffyContainerUi {
         &self.layout
     }
 
-    /// Is this the first frame. Content may be invisible to avoid flickering
+    /// Is this the first frame.
     pub fn first_frame(&self) -> bool {
         self.first_frame
     }
