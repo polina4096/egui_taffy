@@ -510,9 +510,7 @@ impl Tui {
         )
     }
 
-    /// Add scroll area node to the taffy layout
-    ///
-    /// TODO: Add support for scroll area content to be handled in the same taffy tree
+    /// Add scroll area egui Ui to the taffy layout
     fn add_scroll_area_ext<T>(
         &mut self,
         mut params: TuiBuilderParams,
@@ -1299,7 +1297,9 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             .add_children_inner(tui.params, Some(content), |tui, _| f(tui))
     }
 
-    /// Add scroll area as leaf node and draw background for it
+    /// Add scroll area egui Ui
+    ///
+    /// Alternative: Using `overflow: Scroll` scroll area will be directly inserted in taffy layout.
     fn add_scroll_area_with_background<T>(self, content: impl FnOnce(&mut Ui) -> T) -> T {
         let mut tui = self.tui();
         tui = tui.mut_style(|style| {
@@ -1328,14 +1328,18 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         })
     }
 
-    /// Add scroll area as leaf node
+    /// Add scroll area egui Ui
+    ///
+    /// Alternative: Using `overflow: Scroll` scroll area will be directly inserted in taffy layout.
     fn add_scroll_area<T>(self, content: impl FnOnce(&mut Ui) -> T) -> T {
         let tui = self.tui();
         let limit = tui.tui.limit_scroll_area_size;
         tui.add_scroll_area_ext(limit, content)
     }
 
-    /// Add scroll area as leaf node and provide custom limit for scroll area size
+    /// Add egui::Ui scroll area with custom limit for scroll area size
+    ///
+    /// Alternative: Using `overflow: Scroll` scroll area will be directly inserted in taffy layout.
     fn add_scroll_area_ext<T>(self, limit: Option<f32>, content: impl FnOnce(&mut Ui) -> T) -> T {
         let tui = self.tui();
         tui.tui.add_scroll_area_ext(tui.params, limit, content)
