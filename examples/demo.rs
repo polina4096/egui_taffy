@@ -66,7 +66,7 @@ fn flex_wrap_demo(ctx: &egui::Context) {
                 tui.ui_add(egui::Label::new("label"));
                 tui.ui_add(egui::Button::new("button"));
                 tui.separator();
-                tui.label("Text");
+                tui.label("Left aligned text");
 
                 // You can add custom style or unique id to every element that is added to ui
                 // by calling id, style, mut_style methods on it first using builder pattern
@@ -76,6 +76,7 @@ fn flex_wrap_demo(ctx: &egui::Context) {
                     align_self: Some(taffy::AlignItems::Center),
                     ..Default::default()
                 })
+                .egui_layout(egui::Layout::default().with_cross_align(egui::Align::Center))
                 .label("Centered text");
 
                 tui.style(default_style())
@@ -83,6 +84,7 @@ fn flex_wrap_demo(ctx: &egui::Context) {
                         // Modify one field of the style
                         style.align_self = Some(taffy::AlignItems::End);
                     })
+                    .egui_layout(egui::Layout::default().with_cross_align(egui::Align::RIGHT))
                     .label("Right aligned text");
 
                 // You can add elements with custom background using add_with_ family of methods
