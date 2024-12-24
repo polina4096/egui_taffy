@@ -1173,8 +1173,10 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         )
     }
 
-    /// Add tui node as children to this node and draw simple group Frame background
-    fn add_with_border<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
+    /// To correctly layout element with border,
+    /// set taffy style border size parameter
+    /// from egui noninteractive widget visual bg_stroke width.
+    fn with_border_style_from_egui_style(self) -> TuiBuilder<'r> {
         let tui = self.tui();
         let border = tui.tui.egui_ui().style().noninteractive().bg_stroke.width;
         let tui = tui.mut_style(|style| {
@@ -1183,37 +1185,44 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 style.border = length(border);
             }
         });
-        tui.add_with_background_ui(
-            |ui, container| {
-                let noninteractive = ui.style().noninteractive();
-                let max_rect = container.full_container();
+        tui
+    }
 
-                // Background is transparent to events
-                ui.painter().rect_stroke(
-                    max_rect,
-                    noninteractive.rounding,
-                    noninteractive.bg_stroke,
-                );
-            },
-            f,
-        )
+    /// Add tui node as children to this node and draw simple group Frame background
+    fn add_with_border<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
+        self.with_border_style_from_egui_style()
+            .add_with_background_ui(
+                |ui, container| {
+                    let noninteractive = ui.style().noninteractive();
+                    let max_rect = container.full_container();
+
+                    // Background is transparent to events
+                    ui.painter().rect_stroke(
+                        max_rect,
+                        noninteractive.rounding,
+                        noninteractive.bg_stroke,
+                    );
+                },
+                f,
+            )
     }
 
     /// Add tui node with background that acts as egui button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
     fn button<T>(self, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
-        let tui = self.tui();
+        let tui = self.with_border_style_from_egui_style();
         let data =
             std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
 
         let inner = tui.tui.add_children_inner(
             tui.params,
-            Some(|ui: &mut egui::Ui, _: &TaffyContainerUi| {
+            Some(|ui: &mut egui::Ui, container: &TaffyContainerUi| {
                 let available_space = ui.available_size();
                 let (id, rect) = ui.allocate_space(available_space);
                 let response = ui.interact(rect, id, egui::Sense::click());
                 let visuals = ui.style().interact(&response);
 
+                let rect = container.full_container_without_border();
                 let painter = ui.painter();
                 painter.rect_filled(
                     rect.expand(visuals.expansion),
@@ -1245,18 +1254,19 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add tui node with background that acts as selectable button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
     fn selectable<T>(self, selected: bool, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
-        let tui = self.tui();
+        let tui = self.with_border_style_from_egui_style();
         let data =
             std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
 
         let inner = tui.tui.add_children_inner(
             tui.params,
-            Some(|ui: &mut egui::Ui, _: &TaffyContainerUi| {
+            Some(|ui: &mut egui::Ui, container: &TaffyContainerUi| {
                 let available_space = ui.available_size();
                 let (id, rect) = ui.allocate_space(available_space);
                 let response = ui.interact(rect, id, egui::Sense::click());
                 let visuals = ui.style().interact_selectable(&response, selected);
 
+                let rect = container.full_container_without_border();
                 let painter = ui.painter();
                 painter.rect_filled(
                     rect.expand(visuals.expansion),
