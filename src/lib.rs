@@ -580,7 +580,6 @@ impl Tui {
                         intrinsic_size: None,
                         max_size,
                         infinite: egui::Vec2b::FALSE,
-                        scroll_area: true,
                     }
                 },
             )
@@ -868,8 +867,6 @@ pub struct TuiContainerResponse<T> {
     pub max_size: egui::Vec2,
     /// Can widget grow to infinite size in given dimensions
     pub infinite: egui::Vec2b,
-    /// Is container a scroll area
-    pub scroll_area: bool,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1372,7 +1369,6 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 intrinsic_size: None,
                 max_size: ui.min_size(),
                 infinite: egui::Vec2b::FALSE,
-                scroll_area: false,
             }
         })
     }
@@ -1387,7 +1383,6 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 intrinsic_size: None,
                 max_size: ui.min_size(),
                 infinite: egui::Vec2b::TRUE,
-                scroll_area: false,
             }
         })
     }
@@ -1430,7 +1425,6 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 max_size: response.rect.size(),
                 infinite: egui::Vec2b::FALSE,
                 inner: response,
-                scroll_area: false,
             };
 
             transform(resp, ui)
