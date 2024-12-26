@@ -15,6 +15,7 @@ Release adds support for scrollable elements, handling overflow style parameter 
   takes `egui::Ui`.
 * `add_with_background`: background drawing function now takes additional argument (`&TaffyContainerUi`) 
   which contains more precise information about layout that can be used to draw background.
+* Added `tui.colored_label(color, label)` helper method.
 
 ## 0.4
 

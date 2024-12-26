@@ -1496,6 +1496,12 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         egui::Label::new(text).taffy_ui(self.tui())
     }
 
+    /// Add egui colored label as child node
+    #[inline]
+    fn colored_label(self, color: egui::Color32, text: impl Into<egui::RichText>) -> Response {
+        egui::Label::new(text.into().color(color)).taffy_ui(self.tui())
+    }
+
     /// Add label as child node with strong visual formatting
     #[inline]
     fn strong(self, text: impl Into<egui::RichText>) -> Response {
