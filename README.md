@@ -111,6 +111,16 @@ Preview:
 
 ![grow_demo](https://github.com/user-attachments/assets/967f1de3-7918-46b8-9033-ab9c6928816e)
 
+### Overflow demo
+
+**Supports scrollable elements!**
+
+![overflow_demo](https://github.com/user-attachments/assets/9a0983e8-a94b-4a00-83e8-ac524ef90103)
+
+### Sticky elements (Sticky row and column in scrollable grid)
+
+https://github.com/user-attachments/assets/07546146-7a90-422b-b291-99b758fd7704
+
 ## Egui options
 
 ### Max passes
