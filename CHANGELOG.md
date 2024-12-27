@@ -2,12 +2,19 @@
 
 ## 0.5
 
-Release adds support for scroll area, handling overflow css style.
+Release adds support for scrollable elements, handling overflow style parameter and sticky elements!
 
-* Added overflow demo to examples for all overflow settings: Visible, Clip, Hidden, Scroll,.
-* Added support to hide or clip overflowing content using `taffy::Overflow::Clip`, `taffy::Overflow::Hidden`.
-* Automatically add `egui::ScrollArea` when overflow: `taffy::Overflow:Scroll` is set.
-* `add_with_border` now sets border_size value in taffy::Style if border size was set to default value (`Rect::zero()`).
+* Added support for elements that can scroll (`overflow: scroll`).
+  egui_taffy automatically adds `egui::ScrollArea` when overflow: `taffy::Overflow:Scroll` is set.
+* `add_with_border`, `button`, `selectable` methods now sets border_size value from egui::Style in taffy::Style if border size was set to default value (`Rect::zero()`).
+* Added support for sticky elements.
+* Added support for all `taffy::Overflow` values: Visible, Clip, Hidden, Scroll.
+* Added example for all overflow settings: Visible, Clip, Hidden, Scroll.
+* Added example for sticky row, column in scrollable grid.
+* `add_scroll_area` family of functions prefix was changed from "add"" to "ui" to imply that inner closure
+  takes `egui::Ui`.
+* `add_with_background`: background drawing function now takes additional argument (`&TaffyContainerUi`) 
+  which contains more precise information about layout that can be used to draw background.
 
 ## 0.4
 
