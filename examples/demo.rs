@@ -1,8 +1,8 @@
-use egui::Vec2b;
+use egui::{ecolor::tint_color_towards, Vec2b};
 use egui_taffy::{tui, TuiBuilderLogic};
 use taffy::{
     prelude::{auto, fr, length, percent, repeat, span},
-    Overflow, Style,
+    style_helpers, Style,
 };
 
 fn main() -> eframe::Result {
@@ -35,6 +35,8 @@ fn main() -> eframe::Result {
         button_demo(ctx, &mut button_variables);
 
         overflow_demo(ctx);
+
+        grid_sticky(ctx);
     })
 }
 
@@ -525,7 +527,7 @@ fn overflow_demo(ctx: &egui::Context) {
                         tui.style(taffy::Style {
                             flex_direction: taffy::FlexDirection::Column,
                             overflow: taffy::Point {
-                                x: Overflow::default(),
+                                x: taffy::Overflow::default(),
                                 y: overflow,
                             },
                             max_size: taffy::Size {
@@ -542,6 +544,105 @@ fn overflow_demo(ctx: &egui::Context) {
                             }
                         });
                     }
+                });
+        });
+}
+
+fn grid_sticky(ctx: &egui::Context) {
+    egui::Window::new("Sticky header and column in grid")
+        .scroll(Vec2b::FALSE)
+        .show(ctx, |ui| {
+            tui(ui, ui.id().with("sticky grid demo"))
+                .reserve_available_space()
+                .style(taffy::Style {
+                    size: percent(1.),
+                    ..Default::default()
+                })
+                .show(|tui| {
+                    let style = tui.egui_style_mut();
+                    style.visuals.widgets.noninteractive.rounding = egui::Rounding::ZERO;
+
+                    let cell_style = taffy::Style {
+                        flex_direction: taffy::FlexDirection::Column,
+                        align_items: Some(taffy::AlignItems::Center),
+                        justify_content: Some(taffy::AlignContent::SpaceAround),
+                        padding: length(16.),
+                        ..Default::default()
+                    };
+
+                    let columns = 16i16;
+                    let rows = 16i16;
+
+                    tui.style(taffy::Style {
+                        overflow: taffy::Point {
+                            x: taffy::Overflow::Scroll,
+                            y: taffy::Overflow::Scroll,
+                        },
+                        size: percent(1.),
+                        max_size: percent(1.),
+                        display: taffy::Display::Grid,
+                        align_items: Some(taffy::AlignItems::Stretch),
+                        justify_items: Some(taffy::AlignItems::Stretch),
+                        grid_template_rows: vec![auto(); (rows + 1) as usize],
+                        grid_template_columns: vec![auto(); (columns + 1) as usize],
+                        ..Default::default()
+                    })
+                    .add(|tui| {
+                        for i in 1..rows {
+                            for j in 1..columns {
+                                tui.style(taffy::Style {
+                                    grid_column: style_helpers::line(j + 1),
+                                    grid_row: style_helpers::line(i + 1),
+
+                                    ..cell_style.clone()
+                                })
+                                .add_with_border(|tui| {
+                                    tui.label(format!("Cell {} {}", i, j));
+                                });
+                            }
+                        }
+
+                        // Header styling
+                        let style = tui.egui_style_mut();
+                        style.visuals.panel_fill = egui::Color32::DARK_BLUE;
+
+                        for i in 1..columns {
+                            tui.sticky([false, true].into())
+                                .style(taffy::Style {
+                                    grid_column: style_helpers::line(i + 1),
+                                    grid_row: style_helpers::line(1),
+
+                                    ..cell_style.clone()
+                                })
+                                .add_with_background(|tui| {
+                                    tui.label(format!("Header {}", i));
+                                });
+                        }
+
+                        for i in 1..rows {
+                            tui.sticky([true, false].into())
+                                .style(taffy::Style {
+                                    grid_column: style_helpers::line(1),
+                                    grid_row: style_helpers::line(i + 1),
+
+                                    ..cell_style.clone()
+                                })
+                                .add_with_background(|tui| {
+                                    tui.label(format!("Row header {}", i));
+                                });
+                        }
+
+                        tui.sticky(true.into())
+                            .style(taffy::Style {
+                                grid_column: style_helpers::line(1),
+                                grid_row: style_helpers::line(1),
+
+                                ..cell_style.clone()
+                            })
+                            .add_with_background(|tui| {
+                                tui.label("Top left");
+                            });
+                    });
                 });
         });
 }

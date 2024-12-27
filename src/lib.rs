@@ -152,7 +152,9 @@ pub struct Tui {
     current_node: Option<NodeId>,
     current_node_index: usize,
     last_child_count: usize,
+
     parent_rect: egui::Rect,
+    last_scroll_offset: egui::Vec2,
 
     used_items: HashSet<egui::Id>,
 
@@ -203,6 +205,7 @@ impl Tui {
             available_space,
             current_id: id,
             limit_scroll_area_size: None,
+            last_scroll_offset: egui::Vec2::ZERO,
         };
 
         this.tui().id(id).style(style).add(|state| {
@@ -226,7 +229,12 @@ impl Tui {
     }
 
     /// Add taffy child node, correctly update taffy tree state
-    fn add_child_node(&mut self, id: egui::Id, style: taffy::Style) -> (NodeId, TaffyContainerUi) {
+    fn add_child_node(
+        &mut self,
+        id: egui::Id,
+        style: taffy::Style,
+        sticky: egui::Vec2b,
+    ) -> (NodeId, TaffyContainerUi) {
         if self.used_items.contains(&id) {
             log::error!("Taffy layout id collision!");
         }
@@ -268,6 +276,8 @@ impl Tui {
                 layout: state.layout(node_id),
                 parent_rect: self.parent_rect,
                 first_frame,
+                sticky,
+                last_scroll_offset: self.last_scroll_offset,
             };
 
             (node_id, container)
@@ -288,6 +298,7 @@ impl Tui {
             wrap_mode,
             egui_style,
             layout,
+            sticky,
         } = params;
 
         let style = style.unwrap_or_default();
@@ -296,7 +307,7 @@ impl Tui {
 
         let overflow_style = style.overflow;
 
-        let (node_id, taffy_container) = self.add_child_node(id, style);
+        let (node_id, taffy_container) = self.add_child_node(id, style, sticky);
 
         let stored_id = self.current_id;
         let stored_node = self.current_node;
@@ -425,11 +436,14 @@ impl Tui {
                             egui::Sense::hover(),
                         );
 
+                        let mut offset = rect.min - self.parent_rect.min;
+                        std::mem::swap(&mut self.last_scroll_offset, &mut offset);
                         std::mem::swap(&mut self.parent_rect, &mut rect);
                         std::mem::swap(ui, &mut self.ui);
                         let resp = f(self, taffy_container);
                         std::mem::swap(ui, &mut self.ui);
                         std::mem::swap(&mut self.parent_rect, &mut rect);
+                        std::mem::swap(&mut self.last_scroll_offset, &mut offset);
                         resp
                     });
                 scroll.inner
@@ -512,7 +526,7 @@ impl Tui {
     }
 
     /// Add scroll area egui Ui to the taffy layout
-    fn add_scroll_area_ext<T>(
+    fn ui_scroll_area_ext<T>(
         &mut self,
         mut params: TuiBuilderParams,
         limit: Option<f32>,
@@ -547,6 +561,7 @@ impl Tui {
                     wrap_mode: None,
                     egui_style: None,
                     layout: None,
+                    sticky: egui::Vec2b::FALSE,
                 },
                 |ui, _params| {
                     let mut real_min_size = None;
@@ -699,6 +714,8 @@ impl Tui {
                 parent_rect: root_rect,
                 layout: state.layout(current_node),
                 first_frame: false,
+                sticky: egui::Vec2b::FALSE,
+                last_scroll_offset: egui::Vec2::ZERO,
             }
         })
     }
@@ -777,8 +794,10 @@ struct Context {
 
 /// Helper to show the inner content of a container.
 pub struct TaffyContainerUi {
-    parent_rect: egui::Rect,
     layout: taffy::Layout,
+    parent_rect: egui::Rect,
+    last_scroll_offset: egui::Vec2,
+    sticky: egui::Vec2b,
     first_frame: bool,
 }
 
@@ -797,6 +816,11 @@ fn top_left(rect: &taffy::Rect<f32>) -> taffy::Point<f32> {
 }
 
 impl TaffyContainerUi {
+    /// Sticky element compensation amount based on last scrollable ancestor scroll offset
+    pub fn sticky_offset(&self) -> egui::Vec2 {
+        self.sticky.to_vec2() * self.last_scroll_offset
+    }
+
     /// Full container size
     pub fn full_container(&self) -> egui::Rect {
         let layout = &self.layout;
@@ -804,7 +828,7 @@ impl TaffyContainerUi {
             Pos2::new(layout.location.x, layout.location.y),
             egui::Vec2::new(layout.size.width, layout.size.height),
         );
-        rect.translate(self.parent_rect.min.to_vec2())
+        rect.translate(self.parent_rect.min.to_vec2() - self.sticky_offset())
     }
 
     /// Full container rect without border
@@ -818,7 +842,7 @@ impl TaffyContainerUi {
             Pos2::new(pos.x, pos.y),
             egui::Vec2::new(size.width, size.height),
         );
-        rect.translate(self.parent_rect.min.to_vec2())
+        rect.translate(self.parent_rect.min.to_vec2() - self.sticky_offset())
     }
 
     /// Full container rect without border and padding
@@ -832,7 +856,7 @@ impl TaffyContainerUi {
             Pos2::new(pos.x, pos.y),
             egui::Vec2::new(size.width, size.height),
         );
-        rect.translate(self.parent_rect.min.to_vec2())
+        rect.translate(self.parent_rect.min.to_vec2() - self.sticky_offset())
     }
 
     /// Calculated taffy::Layout for this node
@@ -848,6 +872,11 @@ impl TaffyContainerUi {
     /// Parent rect that is used to calculate rect of this node
     pub fn parent_rect(&self) -> egui::Rect {
         self.parent_rect
+    }
+
+    /// Is element position sticky in specified dimensions
+    pub fn sticky(&self) -> egui::Vec2b {
+        self.sticky
     }
 }
 
@@ -996,6 +1025,9 @@ pub struct TuiBuilderParams {
 
     /// Layout for egui child ui
     pub layout: Option<egui::Layout>,
+
+    /// Sticky position (Should last scroll offset affect the position of the element)
+    pub sticky: egui::Vec2b,
 }
 
 impl<'r> TuiBuilder<'r> {
@@ -1025,6 +1057,7 @@ impl<'r> AsTuiBuilder<'r> for &'r mut Tui {
                 wrap_mode: None,
                 egui_style: None,
                 layout: None,
+                sticky: egui::Vec2b::FALSE,
             },
         }
     }
@@ -1138,6 +1171,17 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         tui
     }
 
+    /// Set element as sticky in specified dimensions.
+    ///
+    /// Element position in specified dimensions will not be affected by ancestore `overflow: scroll` element
+    /// scroll offset in specified dimension.
+    #[inline]
+    fn sticky(self, sticky: egui::Vec2b) -> TuiBuilder<'r> {
+        let mut tui = self.tui();
+        tui.params.sticky = sticky;
+        tui
+    }
+
     /// Add tui node as children to this node
     fn add<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui();
@@ -1157,14 +1201,29 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
     /// Add tui node as children to this node and draw popup background
     fn add_with_background<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
-        self.add_with_background_ui(
-            |ui, _| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    let available_space = ui.available_size();
-                    let (id, rect) = ui.allocate_space(available_space);
-                    let _response = ui.interact(rect, id, egui::Sense::click_and_drag());
-                    // Background is not transparent to events
-                });
+        let tui = self.tui();
+        let border = tui.tui.egui_ui().style().noninteractive().bg_stroke.width;
+        let tui = tui.mut_style(|style| {
+            // Allocate space for border in layout
+            if style.border == Rect::zero() {
+                style.border = length(border);
+            }
+        });
+        tui.add_with_background_ui(
+            |ui, container| {
+                let available_space = ui.available_size();
+                let (id, rect) = ui.allocate_space(available_space);
+                let _response = ui.interact(rect, id, egui::Sense::click_and_drag());
+                // Background is not transparent to events
+
+                let visuals = ui.style().visuals.noninteractive();
+                let window_fill = ui.style().visuals.panel_fill;
+
+                let rect = container.full_container();
+
+                let painter = ui.painter();
+                painter.rect_filled(rect, visuals.rounding, window_fill);
+                painter.rect_stroke(rect, visuals.rounding, visuals.bg_stroke);
             },
             f,
         )
@@ -1308,7 +1367,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add scroll area egui Ui
     ///
     /// Alternative: Using `overflow: Scroll` scroll area will be directly inserted in taffy layout.
-    fn add_scroll_area_with_background<T>(self, content: impl FnOnce(&mut Ui) -> T) -> T {
+    fn ui_scroll_area_with_background<T>(self, content: impl FnOnce(&mut Ui) -> T) -> T {
         let mut tui = self.tui();
         tui = tui.mut_style(|style| {
             if style.min_size.height == Dimension::Auto {
@@ -1332,25 +1391,25 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 },
                 ..Default::default()
             };
-            tui.tui().style(style).add_scroll_area(content)
+            tui.tui().style(style).ui_scroll_area(content)
         })
     }
 
     /// Add scroll area egui Ui
     ///
     /// Alternative: Using `overflow: Scroll` scroll area will be directly inserted in taffy layout.
-    fn add_scroll_area<T>(self, content: impl FnOnce(&mut Ui) -> T) -> T {
+    fn ui_scroll_area<T>(self, content: impl FnOnce(&mut Ui) -> T) -> T {
         let tui = self.tui();
         let limit = tui.tui.limit_scroll_area_size;
-        tui.add_scroll_area_ext(limit, content)
+        tui.ui_scroll_area_ext(limit, content)
     }
 
     /// Add egui::Ui scroll area with custom limit for scroll area size
     ///
     /// Alternative: Using `overflow: Scroll` scroll area will be directly inserted in taffy layout.
-    fn add_scroll_area_ext<T>(self, limit: Option<f32>, content: impl FnOnce(&mut Ui) -> T) -> T {
+    fn ui_scroll_area_ext<T>(self, limit: Option<f32>, content: impl FnOnce(&mut Ui) -> T) -> T {
         let tui = self.tui();
-        tui.tui.add_scroll_area_ext(tui.params, limit, content)
+        tui.tui.ui_scroll_area_ext(tui.params, limit, content)
     }
 
     /// Add egui ui as tui leaf node
