@@ -1,13 +1,6 @@
 use crate::{TuiBuilderLogic, TuiContainerResponse};
 
 use super::{TuiBuilder, TuiWidget};
-use egui::{
-    widgets::{
-        Checkbox, DragValue, Hyperlink, Image, ImageButton, Label, Link, ProgressBar, RadioButton,
-        SelectableLabel, Slider, Spinner, TextEdit,
-    },
-    Button,
-};
 
 /// Implement egui widgets for taffy ui
 ///
@@ -26,22 +19,22 @@ macro_rules! impl_widget {
     };
 }
 impl_widget!(
-    Label,
-    Checkbox<'_>,
-    Image<'_>,
-    DragValue<'_>,
-    Hyperlink,
-    ImageButton<'_>,
-    ProgressBar,
-    RadioButton,
-    Link,
-    SelectableLabel,
-    Slider<'_>,
-    TextEdit<'_>,
-    Spinner
+    egui::Label,
+    egui::Checkbox<'_>,
+    egui::Image<'_>,
+    egui::DragValue<'_>,
+    egui::Hyperlink,
+    egui::ImageButton<'_>,
+    egui::ProgressBar,
+    egui::RadioButton,
+    egui::Link,
+    egui::SelectableLabel,
+    egui::Slider<'_>,
+    egui::TextEdit<'_>,
+    egui::Spinner
 );
 
-impl TuiWidget for Button<'_> {
+impl TuiWidget for egui::Button<'_> {
     type Response = egui::Response;
 
     fn taffy_ui(self, tui: TuiBuilder) -> Self::Response {

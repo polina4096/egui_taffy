@@ -427,15 +427,12 @@ impl Tui {
                     .show(&mut tmp_ui, |ui| {
                         // Allocate expected size for scroll area to correctly calculate inner size
                         let content_size = taffy_container.layout.content_size;
-                        let (mut rect, _resp) = ui.allocate_exact_size(
-                            // TODO: Fix -1 workaround
-                            // -1 due to unknown bug in calculation and redundant scrollbar
-                            // Maybe egui rounds something. See scrollbar demo.
-                            egui::Vec2::new(content_size.width - 1., content_size.height - 1.)
+                        ui.set_min_size(
+                            egui::Vec2::new(content_size.width, content_size.height)
                                 .max(egui::Vec2::ZERO),
-                            egui::Sense::hover(),
                         );
 
+                        let mut rect = ui.min_rect();
                         let mut offset = rect.min - self.parent_rect.min;
                         std::mem::swap(&mut self.last_scroll_offset, &mut offset);
                         std::mem::swap(&mut self.parent_rect, &mut rect);
@@ -769,6 +766,11 @@ impl Tui {
                 .unwrap()
                 .clone()
         })
+    }
+
+    /// Current Tui UI id
+    pub fn current_id(&self) -> egui::Id {
+        self.current_id
     }
 }
 
@@ -1201,29 +1203,24 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
     /// Add tui node as children to this node and draw popup background
     fn add_with_background<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
-        let tui = self.tui();
-        let border = tui.tui.egui_ui().style().noninteractive().bg_stroke.width;
-        let tui = tui.mut_style(|style| {
-            // Allocate space for border in layout
-            if style.border == Rect::zero() {
-                style.border = length(border);
-            }
-        });
+        let tui = self.tui().with_border_style_from_egui_style();
         tui.add_with_background_ui(
             |ui, container| {
-                let available_space = ui.available_size();
-                let (id, rect) = ui.allocate_space(available_space);
-                let _response = ui.interact(rect, id, egui::Sense::click_and_drag());
+                let rect = container.full_container();
+                let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
                 // Background is not transparent to events
 
                 let visuals = ui.style().visuals.noninteractive();
                 let window_fill = ui.style().visuals.panel_fill;
 
-                let rect = container.full_container();
-
                 let painter = ui.painter();
-                painter.rect_filled(rect, visuals.rounding, window_fill);
-                painter.rect_stroke(rect, visuals.rounding, visuals.bg_stroke);
+                let stroke = visuals.bg_stroke;
+                painter.rect(
+                    rect.shrink(stroke.width),
+                    visuals.rounding,
+                    window_fill,
+                    stroke,
+                );
             },
             f,
         )
@@ -1249,15 +1246,13 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         self.with_border_style_from_egui_style()
             .add_with_background_ui(
                 |ui, container| {
-                    let noninteractive = ui.style().noninteractive();
-                    let max_rect = container.full_container();
+                    let visuals = ui.style().noninteractive();
+                    let rect = container.full_container();
 
                     // Background is transparent to events
-                    ui.painter().rect_stroke(
-                        max_rect,
-                        noninteractive.rounding,
-                        noninteractive.bg_stroke,
-                    );
+                    let stroke = visuals.bg_stroke;
+                    ui.painter()
+                        .rect_stroke(rect.shrink(stroke.width), visuals.rounding, stroke);
                 },
                 f,
             )
@@ -1273,19 +1268,18 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         let inner = tui.tui.add_children_inner(
             tui.params,
             Some(|ui: &mut egui::Ui, container: &TaffyContainerUi| {
-                let available_space = ui.available_size();
-                let (id, rect) = ui.allocate_space(available_space);
-                let response = ui.interact(rect, id, egui::Sense::click());
+                let rect = container.full_container();
+                let response = ui.allocate_rect(rect, egui::Sense::click());
                 let visuals = ui.style().interact(&response);
 
-                let rect = container.full_container_without_border();
                 let painter = ui.painter();
-                painter.rect_filled(
-                    rect.expand(visuals.expansion),
+                let stroke = visuals.bg_stroke;
+                painter.rect(
+                    rect.shrink(stroke.width),
                     visuals.rounding,
                     visuals.weak_bg_fill,
+                    stroke,
                 );
-                painter.rect_stroke(rect, visuals.rounding, visuals.bg_stroke);
 
                 *data.borrow_mut() = Some((*visuals, response));
             }),
@@ -1317,19 +1311,18 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         let inner = tui.tui.add_children_inner(
             tui.params,
             Some(|ui: &mut egui::Ui, container: &TaffyContainerUi| {
-                let available_space = ui.available_size();
-                let (id, rect) = ui.allocate_space(available_space);
-                let response = ui.interact(rect, id, egui::Sense::click());
+                let rect = container.full_container();
+                let response = ui.allocate_rect(rect, egui::Sense::click());
                 let visuals = ui.style().interact_selectable(&response, selected);
 
-                let rect = container.full_container_without_border();
                 let painter = ui.painter();
-                painter.rect_filled(
-                    rect.expand(visuals.expansion),
+                let stroke = visuals.bg_stroke;
+                painter.rect(
+                    rect.shrink(stroke.width),
                     visuals.rounding,
                     visuals.weak_bg_fill,
+                    stroke,
                 );
-                painter.rect_stroke(rect, visuals.rounding, visuals.bg_stroke);
 
                 *data.borrow_mut() = Some((visuals, response));
             }),
