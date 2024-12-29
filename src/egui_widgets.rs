@@ -25,7 +25,6 @@ impl_widget!(
     egui::DragValue<'_>,
     egui::Hyperlink,
     egui::ImageButton<'_>,
-    egui::ProgressBar,
     egui::RadioButton,
     egui::Link,
     egui::SelectableLabel,
@@ -33,6 +32,31 @@ impl_widget!(
     egui::TextEdit<'_>,
     egui::Spinner
 );
+
+impl TuiWidget for egui::ProgressBar {
+    type Response = egui::Response;
+
+    fn taffy_ui(self, tuib: TuiBuilder) -> Self::Response {
+        // Values taken from ProgressBar implementation
+        let intrinsic_size = egui::Vec2 {
+            x: 96.,
+            y: tuib.builder_tui().egui_ui().spacing().interact_size.y,
+        };
+
+        tuib.ui_add_manual(
+            |ui| ui.add(self),
+            |mut val, _ui| {
+                val.intrinsic_size = Some(
+                    val.intrinsic_size
+                        .map(|val| val.min(intrinsic_size))
+                        .unwrap_or(intrinsic_size),
+                );
+                val.infinite = egui::Vec2b { x: true, y: false };
+                val
+            },
+        )
+    }
+}
 
 impl TuiWidget for egui::Button<'_> {
     type Response = egui::Response;
