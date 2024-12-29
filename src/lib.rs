@@ -1201,6 +1201,25 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         self.tui().add(|_| {})
     }
 
+    /// Add tui node as children to this node and draw only background color
+    fn add_with_background_color<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
+        let tui = self.tui();
+        tui.add_with_background_ui(
+            |ui, container| {
+                let rect = container.full_container();
+                let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+                // Background is not transparent to events
+
+                let visuals = ui.style().visuals.noninteractive();
+                let window_fill = ui.style().visuals.panel_fill;
+
+                let painter = ui.painter();
+                painter.rect_filled(rect, visuals.rounding, window_fill);
+            },
+            f,
+        )
+    }
+
     /// Add tui node as children to this node and draw popup background
     fn add_with_background<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui().with_border_style_from_egui_style();
