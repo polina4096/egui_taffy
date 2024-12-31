@@ -1,3 +1,5 @@
+use eframe::{App, Frame};
+use eframe::egui::{self, Vec2b};
 use egui::Vec2b;
 use egui_taffy::{
     tid, tui,
@@ -10,23 +12,14 @@ use taffy::{
 };
 
 #[derive(Default)]
-pub struct State {
-    grow_variables: Option<GrowVariables>,
-    button_params: ButtonParams,
-    show_flex_grid_demo: bool,
-    show_flex_demo: bool,
-    show_flex_wrap_demo: bool,
-    show_grow_demo: bool,
-    show_button_demo: bool,
-    show_overflow_demo: bool,
-    show_grid_sticky_demo: bool,
-    show_virtual_grid_demo: bool,
+struct MyApp {
+    state: State,
 }
 
-fn main() -> eframe::Result {
-    let mut state = State::default();
+impl App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
+        let state = &mut self.state;
 
-    eframe::run_simple_native("demo", Default::default(), move |ctx, _frame| {
         // Enable multipass rendering upon request without drawing to screen
         //
         // View README for more details
@@ -58,8 +51,23 @@ fn main() -> eframe::Result {
         grid_sticky(ctx, &mut state);
 
         virtual_grid_demo(ctx, &mut state);
-    })
+    }
 }
+
+#[derive(Default)]
+pub struct State {
+    grow_variables: Option<GrowVariables>,
+    button_params: ButtonParams,
+    show_flex_grid_demo: bool,
+    show_flex_demo: bool,
+    show_flex_wrap_demo: bool,
+    show_grow_demo: bool,
+    show_button_demo: bool,
+    show_overflow_demo: bool,
+    show_grid_sticky_demo: bool,
+    show_virtual_grid_demo: bool,
+}
+
 
 fn ui_side_panel(ctx: &egui::Context, state: &mut State) {
     egui::SidePanel::new(egui::panel::Side::Left, "panel").show(ctx, |ui| {
@@ -823,4 +831,60 @@ fn virtual_grid_demo(ctx: &egui::Context, state: &mut State) {
                     });
                 });
         });
+}
+
+/// Native example
+#[cfg(not(target_arch = "wasm32"))]
+fn main() -> eframe::Result {
+    let app = MyApp::default();
+    eframe::run_native(
+        "Demo",
+        Default::default(),
+        Box::new(|_cc| Ok(Box::new(MyApp::default()))),
+    )
+}
+
+/// Web example
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    use eframe::wasm_bindgen::JsCast as _;
+    use eframe::{WebOptions, WebRunner};
+
+    let web_options = WebOptions::default();
+
+    wasm_bindgen_futures::spawn_local(async {
+        let document = web_sys::window()
+            .expect("No window")
+            .document()
+            .expect("No document");
+
+        let canvas = document
+            .get_element_by_id("the_canvas_id")
+            .expect("Failed to find the_canvas_id")
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .expect("the_canvas_id was not a HtmlCanvasElement");
+
+        let start_result = WebRunner::new()
+            .start(
+                canvas,
+                web_options,
+                Box::new(|_cc| Ok(Box::new(MyApp::default()))),
+            )
+            .await;
+
+        // Remove the loading text and spinner:
+        if let Some(loading_text) = document.get_element_by_id("loading_text") {
+            match start_result {
+                Ok(_) => {
+                    loading_text.remove();
+                }
+                Err(e) => {
+                    loading_text.set_inner_html(
+                        "<p> The app has crashed. See the developer console for details. </p>",
+                    );
+                    panic!("Failed to start eframe: {e:?}");
+                }
+            }
+        }
+    });
 }
