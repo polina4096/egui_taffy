@@ -1,21 +1,14 @@
-use egui::Ui;
+use egui::{Align, Ui};
+use taffy::prelude::length;
 
 use crate::{TuiBuilder, TuiBuilderLogic, TuiWidget};
 
 /// Separator that correctly grows in tui environment in both axis
+///
+/// Determines draw dimension based on parent node taffy::Style flex direction.
 #[derive(Default)]
 pub struct TaffySeparator {
-    is_horizontal_line: Option<bool>,
     separator: egui::Separator,
-}
-
-impl TaffySeparator {
-    /// Draw this separator line vertically
-    pub fn vertical(mut self) -> Self {
-        self.is_horizontal_line = Some(false);
-        self.separator = self.separator.vertical();
-        self
-    }
 }
 
 impl egui::Widget for TaffySeparator {
@@ -27,36 +20,51 @@ impl egui::Widget for TaffySeparator {
 impl TuiWidget for TaffySeparator {
     type Response = egui::Response;
 
-    fn taffy_ui(self, tui: TuiBuilder) -> Self::Response {
-        let tui = tui.mut_style(|style| {
-            style.min_size = taffy::Size {
-                width: taffy::Dimension::Length(0.),
-                height: taffy::Dimension::Length(0.),
-            };
+    fn taffy_ui(mut self, mut tui: TuiBuilder) -> Self::Response {
+        let flex_direction = tui.builder_tui().current_style().flex_direction;
+
+        let stroke = tui
+            .builder_tui()
+            .egui_ui()
+            .visuals()
+            .widgets
+            .noninteractive
+            .bg_stroke;
+
+        tui = tui.mut_style(|style| {
+            style.align_self = Some(taffy::AlignItems::Stretch);
+            style.min_size = length(stroke.width);
+            style.padding = length(3.);
         });
 
-        let is_horizontal_line = self.is_horizontal_line;
+        let is_horizontal = match flex_direction {
+            taffy::FlexDirection::Row => false,
+            taffy::FlexDirection::Column => true,
+            taffy::FlexDirection::RowReverse => false,
+            taffy::FlexDirection::ColumnReverse => true,
+        };
 
-        tui.ui_add_manual(
-            |ui| ui.add(self),
-            |mut space, ui| {
-                let is_horizontal_line =
-                    is_horizontal_line.unwrap_or_else(|| !ui.layout().main_dir().is_horizontal());
-                if let Some(size) = space.intrinsic_size.as_mut() {
-                    match is_horizontal_line {
-                        true => {
-                            size.x = 0.;
-                            space.infinite.x = true;
-                        }
-                        false => {
-                            size.y = 0.;
-                            space.infinite.y = true;
-                        }
-                    }
-                }
+        let layout = match is_horizontal {
+            true => {
+                self.separator = self.separator.horizontal();
+                egui::Layout::top_down(Align::Center)
+            }
+            false => {
+                self.separator = self.separator.vertical();
+                egui::Layout::left_to_right(Align::Center)
+            }
+        };
 
-                space
+        let mut response = None;
+        tui.egui_layout(layout).add_with_background_ui(
+            |ui, rect| {
+                let _ = rect;
+                response = Some(ui.add(self.separator));
             },
-        )
+            |tui| {
+                let _ = tui;
+            },
+        );
+        response.unwrap()
     }
 }
