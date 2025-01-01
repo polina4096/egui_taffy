@@ -1,5 +1,5 @@
-use egui::{Align, Ui};
-use taffy::prelude::length;
+use egui::{Align, Ui, UiBuilder};
+use taffy::prelude::{auto, length};
 
 use crate::{TuiBuilder, TuiBuilderLogic, TuiWidget};
 
@@ -31,18 +31,32 @@ impl TuiWidget for TaffySeparator {
             .noninteractive
             .bg_stroke;
 
-        tui = tui.mut_style(|style| {
-            style.align_self = Some(taffy::AlignItems::Stretch);
-            style.min_size = length(stroke.width);
-            style.padding = length(3.);
-        });
-
         let is_horizontal = match flex_direction {
             taffy::FlexDirection::Row => false,
             taffy::FlexDirection::Column => true,
             taffy::FlexDirection::RowReverse => false,
             taffy::FlexDirection::ColumnReverse => true,
         };
+
+        tui = tui.mut_style(|style| {
+            style.align_self = Some(taffy::AlignItems::Stretch);
+            let default_separator_space_value = 6.; // Taken from egui::ui
+            let space = stroke.width.max(default_separator_space_value);
+
+            let size = match is_horizontal {
+                true => taffy::Size {
+                    height: length(space),
+                    width: auto(),
+                },
+                false => taffy::Size {
+                    height: auto(),
+                    width: length(space),
+                },
+            };
+            style.min_size = size;
+            style.max_size = size;
+            style.size = size;
+        });
 
         let layout = match is_horizontal {
             true => {
@@ -55,16 +69,18 @@ impl TuiWidget for TaffySeparator {
             }
         };
 
-        let mut response = None;
-        tui.egui_layout(layout).add_with_background_ui(
-            |ui, rect| {
-                let _ = rect;
-                response = Some(ui.add(self.separator));
+        let return_values = tui.add_with_background_ui(
+            |ui, container| {
+                let inner = container.full_container_without_border_and_padding();
+                ui.allocate_new_ui(UiBuilder::new().layout(layout).max_rect(inner), |ui| {
+                    ui.add(self.separator)
+                })
+                .inner
             },
-            |tui| {
+            |tui, _, _| {
                 let _ = tui;
             },
         );
-        response.unwrap()
+        return_values.background
     }
 }

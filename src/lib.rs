@@ -285,12 +285,15 @@ impl Tui {
     }
 
     /// Add child taffy node to the layout with optional function to draw background
-    fn add_children_inner<T>(
+    fn add_children_inner<F, B>(
         &mut self,
         params: TuiBuilderParams,
-        content: Option<impl FnOnce(&mut egui::Ui, &TaffyContainerUi)>,
-        f: impl FnOnce(&mut Tui, TaffyContainerUi) -> T,
-    ) -> T {
+        background_draw: B,
+        f: impl FnOnce(&mut Tui, TaffyContainerUi, &mut <B as BackgroundDraw>::ReturnValue) -> F,
+    ) -> TaffyMainBackgroundReturnValues<F, B::ReturnValue>
+    where
+        B: BackgroundDraw,
+    {
         let TuiBuilderParams {
             id,
             style,
@@ -331,8 +334,9 @@ impl Tui {
 
         let full_container_max_rect = taffy_container.full_container();
 
-        if let Some(content) = content {
-            if !full_container_max_rect.any_nan() {
+        let mut bg = match B::auto() {
+            Some(val) => val,
+            None => {
                 let mut ui_builder = egui::UiBuilder::new()
                     .id_salt(id.with("background"))
                     .max_rect(full_container_max_rect);
@@ -355,11 +359,11 @@ impl Tui {
                     child_ui.disable();
                 }
 
-                content(&mut child_ui, &taffy_container);
+                background_draw.draw(&mut child_ui, &taffy_container)
             }
-        }
+        };
 
-        let resp = {
+        let fg = {
             let full_container_without_border = taffy_container.full_container_without_border();
             let mut ui_builder = egui::UiBuilder::new()
                 .id_salt(id)
@@ -437,7 +441,7 @@ impl Tui {
                         std::mem::swap(&mut self.last_scroll_offset, &mut offset);
                         std::mem::swap(&mut self.parent_rect, &mut rect);
                         std::mem::swap(ui, &mut self.ui);
-                        let resp = f(self, taffy_container);
+                        let resp = f(self, taffy_container, &mut bg);
                         std::mem::swap(ui, &mut self.ui);
                         std::mem::swap(&mut self.parent_rect, &mut rect);
                         std::mem::swap(&mut self.last_scroll_offset, &mut offset);
@@ -446,7 +450,7 @@ impl Tui {
                 scroll.inner
             } else {
                 std::mem::swap(&mut tmp_ui, &mut self.ui);
-                let resp = f(self, taffy_container);
+                let resp = f(self, taffy_container, &mut bg);
                 std::mem::swap(&mut tmp_ui, &mut self.ui);
                 resp
             }
@@ -470,7 +474,10 @@ impl Tui {
         self.last_child_count = stored_last_child_count;
         self.parent_rect = stored_parent_rect;
 
-        resp
+        TaffyMainBackgroundReturnValues {
+            main: fg,
+            background: bg,
+        }
     }
 
     /// Add egui user interface as child node in the Tui
@@ -479,47 +486,45 @@ impl Tui {
         params: TuiBuilderParams,
         content: impl FnOnce(&mut Ui, TaffyContainerUi) -> TuiContainerResponse<T>,
     ) -> T {
-        self.add_children_inner(
-            params,
-            None::<fn(&mut egui::Ui, &TaffyContainerUi)>,
-            |tui, taffy_container| {
-                let mut ui_builder = UiBuilder::new()
-                    .max_rect(taffy_container.full_container_without_border_and_padding());
-                if taffy_container.first_frame {
-                    ui_builder = ui_builder.sizing_pass().invisible();
+        let fg_bg = self.add_children_inner(params, (), |tui, taffy_container, _| {
+            let mut ui_builder = UiBuilder::new()
+                .max_rect(taffy_container.full_container_without_border_and_padding());
+            if taffy_container.first_frame {
+                ui_builder = ui_builder.sizing_pass().invisible();
+            }
+            let mut child_ui = tui.ui.new_child(ui_builder);
+
+            let resp = content(&mut child_ui, taffy_container);
+
+            let nodeid = tui.current_node.unwrap();
+
+            Self::with_state(tui.main_id, tui.ui.ctx().clone(), |state| {
+                let min_size = if let Some(intrinsic_size) = resp.intrinsic_size {
+                    resp.min_size.min(intrinsic_size).ceil()
+                } else {
+                    resp.min_size.ceil()
+                };
+
+                let mut max_size = resp.max_size;
+                max_size = max_size.max(min_size);
+
+                let new_content = Context {
+                    min_size,
+                    max_size,
+                    infinite: resp.infinite,
+                };
+                if state.taffy.get_node_context(nodeid) != Some(&new_content) {
+                    state
+                        .taffy
+                        .set_node_context(nodeid, Some(new_content))
+                        .unwrap();
                 }
-                let mut child_ui = tui.ui.new_child(ui_builder);
+            });
 
-                let resp = content(&mut child_ui, taffy_container);
+            resp.inner
+        });
 
-                let nodeid = tui.current_node.unwrap();
-
-                Self::with_state(tui.main_id, tui.ui.ctx().clone(), |state| {
-                    let min_size = if let Some(intrinsic_size) = resp.intrinsic_size {
-                        resp.min_size.min(intrinsic_size).ceil()
-                    } else {
-                        resp.min_size.ceil()
-                    };
-
-                    let mut max_size = resp.max_size;
-                    max_size = max_size.max(min_size);
-
-                    let new_content = Context {
-                        min_size,
-                        max_size,
-                        infinite: resp.infinite,
-                    };
-                    if state.taffy.get_node_context(nodeid) != Some(&new_content) {
-                        state
-                            .taffy
-                            .set_node_context(nodeid, Some(new_content))
-                            .unwrap();
-                    }
-                });
-
-                resp.inner
-            },
-        )
+        fg_bg.main
     }
 
     /// Add scroll area egui Ui to the taffy layout
@@ -900,6 +905,14 @@ pub struct TuiContainerResponse<T> {
     pub infinite: egui::Vec2b,
 }
 
+/// Return values from Main, Background closures
+pub struct TaffyMainBackgroundReturnValues<F, B> {
+    /// Value returned by main layout function
+    pub main: F,
+    /// Value returned by background drawing function
+    pub background: B,
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Implement this trait for a widget to make it usable in a tui container.
@@ -1187,11 +1200,9 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add tui node as children to this node
     fn add<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui();
-        tui.tui.add_children_inner(
-            tui.params,
-            Option::<fn(&mut egui::Ui, &TaffyContainerUi)>::None,
-            |tui, _| f(tui),
-        )
+        tui.tui
+            .add_children_inner(tui.params, (), |tui, _, _| f(tui))
+            .main
     }
 
     /// Add empty tui node as children to this node
@@ -1216,14 +1227,15 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 let painter = ui.painter();
                 painter.rect_filled(rect, visuals.rounding, window_fill);
             },
-            f,
+            |tui, _, _| f(tui),
         )
+        .main
     }
 
     /// Add tui node as children to this node and draw popup background
     fn add_with_background<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui().with_border_style_from_egui_style();
-        tui.add_with_background_ui(
+        let return_values = tui.add_with_background_ui(
             |ui, container| {
                 let rect = container.full_container();
                 let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
@@ -1241,8 +1253,9 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                     stroke,
                 );
             },
-            f,
-        )
+            |tui, _, _| f(tui),
+        );
+        return_values.main
     }
 
     /// To correctly layout element with border,
@@ -1262,7 +1275,8 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
     /// Add tui node as children to this node and draw simple group Frame background
     fn add_with_border<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
-        self.with_border_style_from_egui_style()
+        let return_values = self
+            .with_border_style_from_egui_style()
             .add_with_background_ui(
                 |ui, container| {
                     let visuals = ui.style().noninteractive();
@@ -1273,20 +1287,19 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                     ui.painter()
                         .rect_stroke(rect.shrink(stroke.width), visuals.rounding, stroke);
                 },
-                f,
-            )
+                |tui, _, _| f(tui),
+            );
+        return_values.main
     }
 
     /// Add tui node with background that acts as egui button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
     fn button<T>(self, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
         let tui = self.with_border_style_from_egui_style();
-        let data =
-            std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
 
-        let inner = tui.tui.add_children_inner(
+        let return_values = tui.tui.add_children_inner(
             tui.params,
-            Some(|ui: &mut egui::Ui, container: &TaffyContainerUi| {
+            |ui: &mut egui::Ui, container: &TaffyContainerUi| {
                 let rect = container.full_container();
                 let response = ui.allocate_rect(rect, egui::Sense::click());
                 let visuals = ui.style().interact(&response);
@@ -1300,23 +1313,22 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                     stroke,
                 );
 
-                *data.borrow_mut() = Some((*visuals, response));
-            }),
-            |tui, _| {
-                let data = data.borrow().as_ref().unwrap().0;
+                response
+            },
+            |tui, _, bg_response| {
+                let visuals = *tui.egui_ui().style().interact(&bg_response);
                 let egui_style = tui.egui_style_mut();
                 egui_style.interaction.selectable_labels = false;
-                egui_style.visuals.widgets.inactive = data;
-                egui_style.visuals.widgets.noninteractive = data;
+                egui_style.visuals.widgets.inactive = visuals;
+                egui_style.visuals.widgets.noninteractive = visuals;
 
                 f(tui)
             },
         );
 
-        let data = data.borrow_mut().take().unwrap();
         TuiInnerResponse {
-            inner,
-            response: data.1,
+            inner: return_values.main,
+            response: return_values.background,
         }
     }
 
@@ -1324,12 +1336,10 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
     fn selectable<T>(self, selected: bool, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
         let tui = self.with_border_style_from_egui_style();
-        let data =
-            std::cell::RefCell::<Option<(egui::style::WidgetVisuals, egui::Response)>>::default();
 
-        let inner = tui.tui.add_children_inner(
+        let return_values = tui.tui.add_children_inner(
             tui.params,
-            Some(|ui: &mut egui::Ui, container: &TaffyContainerUi| {
+            |ui: &mut egui::Ui, container: &TaffyContainerUi| {
                 let rect = container.full_container();
                 let response = ui.allocate_rect(rect, egui::Sense::click());
                 let visuals = ui.style().interact_selectable(&response, selected);
@@ -1343,37 +1353,35 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                     stroke,
                 );
 
-                *data.borrow_mut() = Some((visuals, response));
-            }),
-            |tui, _| {
-                let data = data.borrow().as_ref().unwrap().0;
+                response
+            },
+            |tui, _, bg_response| {
+                let visuals = *tui.egui_ui().style().interact(&bg_response);
                 let egui_style = tui.egui_style_mut();
                 egui_style.interaction.selectable_labels = false;
-                egui_style.visuals.widgets.inactive = data;
-                egui_style.visuals.widgets.noninteractive = data;
+                egui_style.visuals.widgets.inactive = visuals;
+                egui_style.visuals.widgets.noninteractive = visuals;
 
                 f(tui)
             },
         );
 
-        let data = data.borrow_mut().take().unwrap();
         TuiInnerResponse {
-            inner,
-            response: data.1,
+            inner: return_values.main,
+            response: return_values.background,
         }
     }
 
     /// Add tui node as children to this node and draw custom background
     ///
     /// See [`TuiBuilderLogic::add_with_background`] for example
-    fn add_with_background_ui<T>(
+    fn add_with_background_ui<F, B>(
         self,
-        content: impl FnOnce(&mut egui::Ui, &TaffyContainerUi),
-        f: impl FnOnce(&mut Tui) -> T,
-    ) -> T {
+        content: impl FnOnce(&mut egui::Ui, &TaffyContainerUi) -> B,
+        f: impl FnOnce(&mut Tui, TaffyContainerUi, &mut B) -> F,
+    ) -> TaffyMainBackgroundReturnValues<F, B> {
         let tui = self.tui();
-        tui.tui
-            .add_children_inner(tui.params, Some(content), |tui, _| f(tui))
+        tui.tui.add_children_inner(tui.params, content, f)
     }
 
     /// Add scroll area egui Ui
@@ -1563,3 +1571,49 @@ impl<R> std::ops::Deref for TuiInnerResponse<R> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+/// Types that can draw background
+///
+/// [`()`] type draws empty background.
+pub trait BackgroundDraw {
+    /// Value returned by background drawing functionality
+    type ReturnValue;
+
+    /// Function returns Some(value) if background doesn't need to be drawn
+    fn auto() -> Option<Self::ReturnValue>;
+
+    /// Implements background drawing functionality
+    fn draw(self, ui: &mut egui::Ui, container: &TaffyContainerUi) -> Self::ReturnValue;
+}
+
+impl<T, B> BackgroundDraw for T
+where
+    T: FnOnce(&mut egui::Ui, &TaffyContainerUi) -> B,
+{
+    type ReturnValue = B;
+
+    #[inline]
+    fn draw(self, ui: &mut egui::Ui, container: &TaffyContainerUi) -> Self::ReturnValue {
+        self(ui, container)
+    }
+
+    #[inline]
+    fn auto() -> Option<Self::ReturnValue> {
+        None
+    }
+}
+
+impl BackgroundDraw for () {
+    type ReturnValue = ();
+
+    #[inline]
+    fn draw(self, ui: &mut egui::Ui, container: &TaffyContainerUi) -> Self::ReturnValue {
+        let _ = container;
+        let _ = ui;
+    }
+
+    #[inline]
+    fn auto() -> Option<Self::ReturnValue> {
+        Some(())
+    }
+}
