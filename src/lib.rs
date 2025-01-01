@@ -318,21 +318,21 @@ impl Tui {
         let stored_last_child_count = self.last_child_count;
         let stored_parent_rect = self.parent_rect;
 
+        let mut full_container_max_rect = taffy_container.full_container();
+        full_container_max_rect = if full_container_max_rect.any_nan() {
+            self.parent_rect
+        } else {
+            full_container_max_rect
+        };
+
         Self::with_state(self.main_id, self.ui.ctx().clone(), |state| {
             self.current_node = Some(node_id);
             self.current_node_index = 0;
             self.last_child_count = state.taffy.child_count(node_id);
 
-            let max_rect = taffy_container.full_container();
-            self.parent_rect = if max_rect.any_nan() {
-                self.parent_rect
-            } else {
-                max_rect
-            };
+            self.parent_rect = full_container_max_rect;
             self.current_id = id;
         });
-
-        let full_container_max_rect = taffy_container.full_container();
 
         let mut bg = match B::auto() {
             Some(val) => val,
