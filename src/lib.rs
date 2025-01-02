@@ -1549,6 +1549,8 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     }
 
     /// Add egui separator  as child node
+    ///
+    /// Seperator is drawn perpendiculary to parent element flex_direction (main_axis)
     #[inline]
     fn separator(self) -> Response {
         TaffySeparator::default().taffy_ui(self.tui())
