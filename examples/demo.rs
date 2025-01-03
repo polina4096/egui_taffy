@@ -9,9 +9,22 @@ use taffy::{
     style_helpers, Style,
 };
 
+#[derive(Default)]
+pub struct State {
+    grow_variables: Option<GrowVariables>,
+    button_params: ButtonParams,
+    show_flex_grid_demo: bool,
+    show_flex_demo: bool,
+    show_flex_wrap_demo: bool,
+    show_grow_demo: bool,
+    show_button_demo: bool,
+    show_overflow_demo: bool,
+    show_grid_sticky_demo: bool,
+    show_virtual_grid_demo: bool,
+}
+
 fn main() -> eframe::Result {
-    let mut grow_variables = None;
-    let mut button_variables = Default::default();
+    let mut state = State::default();
 
     eframe::run_simple_native("demo", Default::default(), move |ctx, _frame| {
         // Enable multipass rendering upon request without drawing to screen
@@ -28,25 +41,69 @@ fn main() -> eframe::Result {
             style.wrap_mode = Some(egui::TextWrapMode::Extend);
         });
 
-        flex_grid_demo(ctx);
+        ui_side_panel(ctx, &mut state);
 
-        flex_demo(ctx);
+        flex_grid_demo(ctx, &mut state);
 
-        flex_wrap_demo(ctx);
+        flex_demo(ctx, &mut state);
 
-        grow_demo(ctx, &mut grow_variables);
+        flex_wrap_demo(ctx, &mut state);
 
-        button_demo(ctx, &mut button_variables);
+        grow_demo(ctx, &mut state);
 
-        overflow_demo(ctx);
+        button_demo(ctx, &mut state);
 
-        grid_sticky(ctx);
+        overflow_demo(ctx, &mut state);
 
-        virtual_grid_demo(ctx);
+        grid_sticky(ctx, &mut state);
+
+        virtual_grid_demo(ctx, &mut state);
     })
 }
 
-fn flex_wrap_demo(ctx: &egui::Context) {
+fn ui_side_panel(ctx: &egui::Context, state: &mut State) {
+    egui::SidePanel::new(egui::panel::Side::Left, "panel").show(ctx, |ui| {
+        tui(ui, ui.id().with("side_panel"))
+            .reserve_available_space()
+            .style(taffy::Style {
+                flex_direction: taffy::FlexDirection::Column,
+                align_items: Some(taffy::AlignItems::Stretch),
+                gap: length(2.),
+                ..Default::default()
+            })
+            .show(|tui| {
+                tui.label("Demos:");
+                for (label, show) in [
+                    ("Grid demo", &mut state.show_flex_grid_demo),
+                    ("Flex demo", &mut state.show_flex_demo),
+                    ("Flex wrap demo", &mut state.show_flex_wrap_demo),
+                    ("Grow demo", &mut state.show_grow_demo),
+                    ("Button demo", &mut state.show_button_demo),
+                    ("Overflow demo", &mut state.show_overflow_demo),
+                    (
+                        "Sticky header and column in grid",
+                        &mut state.show_grid_sticky_demo,
+                    ),
+                    ("Virtual grid row demo", &mut state.show_virtual_grid_demo),
+                ] {
+                    if tui
+                        .style(taffy::Style {
+                            padding: length(4.),
+                            ..Default::default()
+                        })
+                        .selectable(*show, |tui| {
+                            tui.label(label);
+                        })
+                        .clicked()
+                    {
+                        *show = !*show;
+                    }
+                }
+            });
+    });
+}
+
+fn flex_wrap_demo(ctx: &egui::Context, state: &mut State) {
     let default_style = || Style {
         padding: length(8.),
         gap: length(8.),
@@ -55,162 +112,166 @@ fn flex_wrap_demo(ctx: &egui::Context) {
         ..Default::default()
     };
 
-    egui::Window::new("Flex wrap demo").show(ctx, |ui| {
-        tui(ui, ui.id().with("demo"))
-            .reserve_available_space() // Reserve full space of window for this layout
-            .style(Style {
-                flex_direction: taffy::FlexDirection::Column,
-                align_items: Some(taffy::AlignItems::Stretch),
-                ..default_style()
-            })
-            .show(|tui| {
-                // Add egui ui as nodes
-                tui.ui(|ui| {
-                    ui.label("Hello from egui ui!");
-                    let _ = ui.button("Egui button");
-                });
-
-                // Add egui widgets directly to UI that implements [`TuiWidget`] trait
-                tui.ui_add(egui::Label::new("label"));
-                tui.ui_add(egui::Button::new("button"));
-                tui.separator();
-                tui.label("Left aligned text");
-
-                // You can add custom style or unique id to every element that is added to ui
-                // by calling id, style, mut_style methods on it first using builder pattern
-
-                // Provide full style
-                tui.style(Style {
-                    align_self: Some(taffy::AlignItems::Center),
-                    ..Default::default()
-                })
-                .egui_layout(egui::Layout::default().with_cross_align(egui::Align::Center))
-                .label("Centered text");
-
-                tui.style(default_style())
-                    .mut_style(|style| {
-                        // Modify one field of the style
-                        style.align_self = Some(taffy::AlignItems::End);
-                    })
-                    .egui_layout(egui::Layout::default().with_cross_align(egui::Align::RIGHT))
-                    .label("Right aligned text");
-
-                // You can add elements with custom background using add_with_ family of methods
-                tui.add_with_border(|tui| {
-                    tui.label("Text with border");
-                });
-
-                tui.separator();
-
-                tui.style(Style {
-                    flex_wrap: taffy::FlexWrap::Wrap,
-                    justify_items: Some(taffy::AlignItems::Stretch),
+    egui::Window::new("Flex wrap demo")
+        .open(&mut state.show_flex_wrap_demo)
+        .show(ctx, |ui| {
+            tui(ui, ui.id().with("demo"))
+                .reserve_available_space() // Reserve full space of window for this layout
+                .style(Style {
+                    flex_direction: taffy::FlexDirection::Column,
+                    align_items: Some(taffy::AlignItems::Stretch),
                     ..default_style()
                 })
-                .add(|tui| {
-                    for word in FLEX_ITEMS {
-                        tui.style(default_style()).add_with_border(|tui| {
-                            tui.label(word);
-                        });
-                    }
+                .show(|tui| {
+                    // Add egui ui as nodes
+                    tui.ui(|ui| {
+                        ui.label("Hello from egui ui!");
+                        let _ = ui.button("Egui button");
+                    });
+
+                    // Add egui widgets directly to UI that implements [`TuiWidget`] trait
+                    tui.ui_add(egui::Label::new("label"));
+                    tui.ui_add(egui::Button::new("button"));
+                    tui.separator();
+                    tui.label("Left aligned text");
+
+                    // You can add custom style or unique id to every element that is added to ui
+                    // by calling id, style, mut_style methods on it first using builder pattern
+
+                    // Provide full style
+                    tui.style(Style {
+                        align_self: Some(taffy::AlignItems::Center),
+                        ..Default::default()
+                    })
+                    .egui_layout(egui::Layout::default().with_cross_align(egui::Align::Center))
+                    .label("Centered text");
+
+                    tui.style(default_style())
+                        .mut_style(|style| {
+                            // Modify one field of the style
+                            style.align_self = Some(taffy::AlignItems::End);
+                        })
+                        .egui_layout(egui::Layout::default().with_cross_align(egui::Align::RIGHT))
+                        .label("Right aligned text");
+
+                    // You can add elements with custom background using add_with_ family of methods
+                    tui.add_with_border(|tui| {
+                        tui.label("Text with border");
+                    });
+
+                    tui.separator();
+
+                    tui.style(Style {
+                        flex_wrap: taffy::FlexWrap::Wrap,
+                        justify_items: Some(taffy::AlignItems::Stretch),
+                        ..default_style()
+                    })
+                    .add(|tui| {
+                        for word in FLEX_ITEMS {
+                            tui.style(default_style()).add_with_border(|tui| {
+                                tui.label(word);
+                            });
+                        }
+                    });
                 });
-            });
-    });
+        });
 }
 
-fn flex_grid_demo(ctx: &egui::Context) {
-    egui::Window::new("Grid demo").show(ctx, |ui| {
-        // Style rules can be defined as functions and applied with
-        // [`TuiBuilder::mut_style`] function.
-        let align_flex_content_in_center = |style: &mut Style| {
-            // Align content in center in flexbox layout
-            style.justify_content = Some(taffy::JustifyContent::Center);
-            style.align_items = Some(taffy::AlignItems::Center);
-        };
+fn flex_grid_demo(ctx: &egui::Context, state: &mut State) {
+    egui::Window::new("Grid demo")
+        .open(&mut state.show_flex_grid_demo)
+        .show(ctx, |ui| {
+            // Style rules can be defined as functions and applied with
+            // [`TuiBuilder::mut_style`] function.
+            let align_flex_content_in_center = |style: &mut Style| {
+                // Align content in center in flexbox layout
+                style.justify_content = Some(taffy::JustifyContent::Center);
+                style.align_items = Some(taffy::AlignItems::Center);
+            };
 
-        // Initialize Tui layout (Taffy ui layout)
-        tui(ui, "grid")
-            .reserve_available_space()
-            .style(Style {
-                display: taffy::Display::Grid,
+            // Initialize Tui layout (Taffy ui layout)
+            tui(ui, "grid")
+                .reserve_available_space()
+                .style(Style {
+                    display: taffy::Display::Grid,
 
-                // All columns except last one has the same size
-                grid_template_columns: vec![fr(1.), fr(1.), fr(1.), fr(1.), fr(1.), fr(1.5)],
-                // All rows has the same size
-                grid_template_rows: vec![repeat("auto-fill", vec![fr(1.)])],
+                    // All columns except last one has the same size
+                    grid_template_columns: vec![fr(1.), fr(1.), fr(1.), fr(1.), fr(1.), fr(1.5)],
+                    // All rows has the same size
+                    grid_template_rows: vec![repeat("auto-fill", vec![fr(1.)])],
 
-                gap: length(8.),
+                    gap: length(8.),
 
-                // Fill all available parent space
-                size: percent(1.),
+                    // Fill all available parent space
+                    size: percent(1.),
 
-                // Stretch grid cells by default to fill space
-                align_items: Some(taffy::AlignItems::Stretch),
-                justify_items: Some(taffy::AlignItems::Stretch),
+                    // Stretch grid cells by default to fill space
+                    align_items: Some(taffy::AlignItems::Stretch),
+                    justify_items: Some(taffy::AlignItems::Stretch),
 
-                ..Default::default()
-            })
-            .show(|tui| {
-                tui.style(Style {
-                    grid_column: span(5),
                     ..Default::default()
                 })
-                .add_with_border(|tui| {
-                    tui.ui(|ui| {
-                        // Add egui ui as child node to the layout
-                        ui.label("Col span 5");
-                    });
-                });
-
-                tui.style(Style {
-                    grid_row: span(6),
-                    ..Default::default()
-                })
-                .add_with_border(|tui| {
-                    tui.ui(|ui| {
-                        ui.label("Row span 6");
-                    });
-                });
-
-                let align_list = [
-                    taffy::AlignItems::Start,
-                    taffy::AlignItems::Center,
-                    taffy::AlignItems::End,
-                    taffy::AlignItems::Stretch,
-                ];
-
-                tui.add(|_tui| {
-                    //Empty cell
-                });
-
-                for header in align_list {
-                    tui.mut_style(align_flex_content_in_center)
-                        .add_with_border(|tui| {
-                            tui.label(format!("{:?}", header));
+                .show(|tui| {
+                    tui.style(Style {
+                        grid_column: span(5),
+                        ..Default::default()
+                    })
+                    .add_with_border(|tui| {
+                        tui.ui(|ui| {
+                            // Add egui ui as child node to the layout
+                            ui.label("Col span 5");
                         });
-                }
-
-                for align_item in align_list {
-                    tui.add_with_border(|tui| {
-                        tui.label(format!("{:?}", align_item));
                     });
 
-                    for justify_item in align_list {
-                        tui.style(Style {
-                            justify_self: Some(justify_item),
-                            align_self: Some(align_item),
-
-                            padding: length(4.),
-                            ..Default::default()
-                        })
-                        .mut_style(align_flex_content_in_center)
-                        .add_with_border(|tui| {
-                            tui.label(format!("{:?} {:?}", align_item, justify_item));
+                    tui.style(Style {
+                        grid_row: span(6),
+                        ..Default::default()
+                    })
+                    .add_with_border(|tui| {
+                        tui.ui(|ui| {
+                            ui.label("Row span 6");
                         });
+                    });
+
+                    let align_list = [
+                        taffy::AlignItems::Start,
+                        taffy::AlignItems::Center,
+                        taffy::AlignItems::End,
+                        taffy::AlignItems::Stretch,
+                    ];
+
+                    tui.add(|_tui| {
+                        //Empty cell
+                    });
+
+                    for header in align_list {
+                        tui.mut_style(align_flex_content_in_center)
+                            .add_with_border(|tui| {
+                                tui.label(format!("{:?}", header));
+                            });
                     }
-                }
-            });
-    });
+
+                    for align_item in align_list {
+                        tui.add_with_border(|tui| {
+                            tui.label(format!("{:?}", align_item));
+                        });
+
+                        for justify_item in align_list {
+                            tui.style(Style {
+                                justify_self: Some(justify_item),
+                                align_self: Some(align_item),
+
+                                padding: length(4.),
+                                ..Default::default()
+                            })
+                            .mut_style(align_flex_content_in_center)
+                            .add_with_border(|tui| {
+                                tui.label(format!("{:?} {:?}", align_item, justify_item));
+                            });
+                        }
+                    }
+                });
+        });
 }
 
 pub struct GrowVariables {
@@ -219,90 +280,93 @@ pub struct GrowVariables {
     padding: f32,
 }
 
-fn grow_demo(ctx: &egui::Context, variables: &mut Option<GrowVariables>) {
+fn grow_demo(ctx: &egui::Context, state: &mut State) {
     let GrowVariables {
         gap,
         margin,
         padding,
-    } = variables.get_or_insert(GrowVariables {
+    } = state.grow_variables.get_or_insert(GrowVariables {
         gap: 8.,
         margin: 0.,
         padding: 8.,
     });
 
-    egui::Window::new("Grow demo").show(ctx, |ui| {
-        // You can mix egui ui with
-        ui.horizontal(|ui| {
-            ui.label("Gap");
-            ui.add(egui::Slider::new(gap, 0. ..=50.));
-        });
+    egui::Window::new("Grow demo")
+        .open(&mut state.show_grow_demo)
+        .show(ctx, |ui| {
+            // You can mix egui ui with
+            ui.horizontal(|ui| {
+                ui.label("Gap");
+                ui.add(egui::Slider::new(gap, 0. ..=50.));
+            });
 
-        ui.horizontal(|ui| {
-            ui.label("Margin");
-            ui.add(egui::Slider::new(margin, 0. ..=50.));
-        });
+            ui.horizontal(|ui| {
+                ui.label("Margin");
+                ui.add(egui::Slider::new(margin, 0. ..=50.));
+            });
 
-        ui.horizontal(|ui| {
-            ui.label("Padding");
-            ui.add(egui::Slider::new(padding, 0. ..=50.));
-        });
+            ui.horizontal(|ui| {
+                ui.label("Padding");
+                ui.add(egui::Slider::new(padding, 0. ..=50.));
+            });
 
-        let default_style = || Style {
-            padding: length(*padding),
-            margin: length(*margin),
-            gap: length(*gap),
-            ..Default::default()
-        };
+            let default_style = || Style {
+                padding: length(*padding),
+                margin: length(*margin),
+                gap: length(*gap),
+                ..Default::default()
+            };
 
-        // taffy based ui
-        tui(ui, ui.id().with("demo"))
-            .reserve_available_space()
-            .style(Style {
-                flex_direction: taffy::FlexDirection::Column,
-                size: percent(1.),
-                justify_items: Some(taffy::AlignItems::Center),
-                align_items: Some(taffy::AlignItems::Center),
-                ..default_style()
-            })
-            .show(|tui| {
-                for grow in 0..4 {
-                    tui.style(Style {
-                        flex_grow: grow as f32,
-                        align_items: Some(taffy::AlignItems::Center),
-                        ..default_style()
-                    })
-                    .add_with_border(|tui| {
-                        tui.label(format!("Grow {}", grow));
-                    });
-                }
-
-                tui.style(Style {
-                    flex_grow: 6.,
-                    align_self: Some(taffy::AlignItems::Stretch),
-
-                    align_items: Some(taffy::AlignItems::Stretch),
+            // taffy based ui
+            tui(ui, ui.id().with("demo"))
+                .reserve_available_space()
+                .style(Style {
+                    flex_direction: taffy::FlexDirection::Column,
+                    size: percent(1.),
+                    justify_items: Some(taffy::AlignItems::Center),
+                    align_items: Some(taffy::AlignItems::Center),
                     ..default_style()
                 })
-                .add_with_border(|tui| {
+                .show(|tui| {
                     for grow in 0..4 {
                         tui.style(Style {
                             flex_grow: grow as f32,
                             align_items: Some(taffy::AlignItems::Center),
-                            justify_content: Some(taffy::AlignContent::Center),
                             ..default_style()
                         })
                         .add_with_border(|tui| {
                             tui.label(format!("Grow {}", grow));
                         });
                     }
+
+                    tui.style(Style {
+                        flex_grow: 6.,
+                        align_self: Some(taffy::AlignItems::Stretch),
+
+                        align_items: Some(taffy::AlignItems::Stretch),
+                        ..default_style()
+                    })
+                    .add_with_border(|tui| {
+                        for grow in 0..4 {
+                            tui.style(Style {
+                                flex_grow: grow as f32,
+                                align_items: Some(taffy::AlignItems::Center),
+                                justify_content: Some(taffy::AlignContent::Center),
+                                ..default_style()
+                            })
+                            .add_with_border(|tui| {
+                                tui.label(format!("Grow {}", grow));
+                            });
+                        }
+                    });
                 });
-            });
-    });
+        });
 }
 
-fn flex_demo(ctx: &egui::Context) {
+fn flex_demo(ctx: &egui::Context, state: &mut State) {
     egui::Window::new("Flex demo")
         .scroll(Vec2b { x: true, y: true })
+        .open(&mut state.show_flex_demo)
         .show(ctx, |ui| {
             let default_style = || Style {
                 gap: length(8.),
@@ -415,9 +479,11 @@ struct ButtonParams {
     selected: bool,
 }
 
-fn button_demo(ctx: &egui::Context, params: &mut ButtonParams) {
+fn button_demo(ctx: &egui::Context, state: &mut State) {
+    let params = &mut state.button_params;
     egui::Window::new("Button demo")
         .scroll(Vec2b { x: true, y: true })
+        .open(&mut state.show_button_demo)
         .show(ctx, |ui| {
             tui(ui, ui.id().with("button demo"))
                 .reserve_available_width()
@@ -511,9 +577,10 @@ fn button_demo(ctx: &egui::Context, params: &mut ButtonParams) {
         });
 }
 
-fn overflow_demo(ctx: &egui::Context) {
+fn overflow_demo(ctx: &egui::Context, state: &mut State) {
     egui::Window::new("Overflow demo")
         .scroll(Vec2b { x: true, y: true })
+        .open(&mut state.show_overflow_demo)
         .show(ctx, |ui| {
             tui(ui, ui.id().with("overflow demo"))
                 .reserve_available_width()
@@ -554,9 +621,10 @@ fn overflow_demo(ctx: &egui::Context) {
         });
 }
 
-fn grid_sticky(ctx: &egui::Context) {
+fn grid_sticky(ctx: &egui::Context, state: &mut State) {
     egui::Window::new("Sticky header and column in grid")
         .scroll(Vec2b::FALSE)
+        .open(&mut state.show_grid_sticky_demo)
         .show(ctx, |ui| {
             tui(ui, ui.id().with("sticky grid demo"))
                 .reserve_available_space()
@@ -653,75 +721,77 @@ fn grid_sticky(ctx: &egui::Context) {
         });
 }
 
-fn virtual_grid_demo(ctx: &egui::Context) {
-    egui::Window::new("Virtual grid demo").show(ctx, |ui| {
-        tui(ui, ui.id().with("sticky grid demo"))
-            .reserve_available_space()
-            .style(taffy::Style {
-                flex_direction: taffy::FlexDirection::Column,
-                size: percent(1.),
-                max_size: percent(1.),
-                ..Default::default()
-            })
-            .show(|tui| {
-                tui.style(taffy::Style {
-                    display: taffy::Display::Grid,
-                    overflow: taffy::Point {
-                        x: taffy::Overflow::Visible,
-                        y: taffy::Overflow::Scroll,
-                    },
-                    grid_template_columns: vec![auto(), auto()],
-                    size: taffy::Size {
-                        width: percent(1.),
-                        height: auto(),
-                    },
+fn virtual_grid_demo(ctx: &egui::Context, state: &mut State) {
+    egui::Window::new("Virtual grid row demo")
+        .open(&mut state.show_virtual_grid_demo)
+        .show(ctx, |ui| {
+            tui(ui, ui.id().with("virtual_grid"))
+                .reserve_available_space()
+                .style(taffy::Style {
+                    flex_direction: taffy::FlexDirection::Column,
+                    size: percent(1.),
                     max_size: percent(1.),
-                    grid_auto_rows: vec![min_content()],
                     ..Default::default()
                 })
-                .add(|tui| {
-                    let header_row_count = 2;
-
-                    VirtualGridRowHelper::show(
-                        VirtualGridRowHelperParams {
-                            header_row_count,
-                            row_count: 100000,
+                .show(|tui| {
+                    tui.style(taffy::Style {
+                        display: taffy::Display::Grid,
+                        overflow: taffy::Point {
+                            x: taffy::Overflow::Visible,
+                            y: taffy::Overflow::Scroll,
                         },
-                        tui,
-                        |tui, info| {
-                            let mut idgen = info.id_gen();
-                            let mut_grid_row_param = info.grid_row_setter();
-                            let mut container = None;
-
-                            for cidx in 1..=2 {
-                                tui.id(idgen()).mut_style(&mut_grid_row_param).add_ext(
-                                    |tui, cont| {
-                                        tui.label(format!("Cell {} {}", info.idx, cidx));
-                                        container = Some(cont);
-                                    },
-                                );
-                            }
-
-                            VirtualGridRowInfo {
-                                container: container.unwrap(),
-                            }
+                        grid_template_columns: vec![auto(), auto()],
+                        size: taffy::Size {
+                            width: percent(1.),
+                            height: auto(),
                         },
-                    );
+                        max_size: percent(1.),
+                        grid_auto_rows: vec![min_content()],
+                        ..Default::default()
+                    })
+                    .add(|tui| {
+                        let header_row_count = 2;
 
-                    for ridx in 1..=header_row_count {
-                        for idx in 0..2 {
-                            tui.sticky([false, true].into())
-                                .style(taffy::Style {
-                                    grid_row: style_helpers::line(ridx as i16),
-                                    ..Default::default()
-                                })
-                                .id(tid(("header", ridx, idx)))
-                                .add_with_background_color(|tui| {
-                                    tui.label(format!("Column {} {}", ridx, idx));
-                                });
+                        VirtualGridRowHelper::show(
+                            VirtualGridRowHelperParams {
+                                header_row_count,
+                                row_count: 100000,
+                            },
+                            tui,
+                            |tui, info| {
+                                let mut idgen = info.id_gen();
+                                let mut_grid_row_param = info.grid_row_setter();
+                                let mut container = None;
+
+                                for cidx in 1..=2 {
+                                    tui.id(idgen()).mut_style(&mut_grid_row_param).add_ext(
+                                        |tui, cont| {
+                                            tui.label(format!("Cell {} {}", info.idx, cidx));
+                                            container = Some(cont);
+                                        },
+                                    );
+                                }
+
+                                VirtualGridRowInfo {
+                                    container: container.unwrap(),
+                                }
+                            },
+                        );
+
+                        for ridx in 1..=header_row_count {
+                            for idx in 0..2 {
+                                tui.sticky([false, true].into())
+                                    .style(taffy::Style {
+                                        grid_row: style_helpers::line(ridx as i16),
+                                        ..Default::default()
+                                    })
+                                    .id(tid(("header", ridx, idx)))
+                                    .add_with_background_color(|tui| {
+                                        tui.label(format!("Header {} {}", ridx, idx));
+                                    });
+                            }
                         }
-                    }
+                    });
                 });
-            });
-    });
+        });
 }
