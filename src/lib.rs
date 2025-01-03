@@ -1225,7 +1225,10 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         let tui = self.tui();
         tui.add_with_background_ui(
             |ui, container| {
-                let rect = container.full_container();
+                // TODO: Expand added to fill rounded gaps between elements
+                // How to correctly fill space between elements?
+                let rect = container.full_container().expand(1.);
+
                 let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
                 // Background is not transparent to events
 
