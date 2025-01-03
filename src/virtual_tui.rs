@@ -49,6 +49,14 @@ pub struct VirtualGridRowInfo {
     pub container: TaffyContainerUi,
 }
 
+const fn round_up_to_pow2(value: usize, pow2: u8) -> usize {
+    value.saturating_add((1 << pow2) - 1) & !((1 << pow2) - 1)
+}
+
+const fn round_down_to_pow2(value: usize, pow2: u8) -> usize {
+    value & !((1 << pow2) - 1)
+}
+
 impl VirtualGridRowHelper {
     /// Show virtual grid rows.
     ///
@@ -96,15 +104,21 @@ impl VirtualGridRowHelper {
         let scroll_offset = -(tui.last_scroll_offset.y + top_offset);
         let visible_rect_size = tui.current_viewport().size().y;
 
-        let buffer = 2.;
-        let visible_from = (((scroll_offset / full_row_height).floor() - buffer).max(0.) as usize)
-            .clamp(1, row_count);
+        // Round to power of 2 numbers to reduce frequency of taffy layout recalculation
+        // TODO: Maybe store interval in memory?
+        let pow2 = 4; // 2^3 = 16
 
-        let visible_to = ((((scroll_offset + visible_rect_size) / full_row_height).floor()
-            + 1.
-            + buffer)
-            .max(0.) as usize)
-            .clamp(visible_from, row_count);
+        let visible_from = round_down_to_pow2(
+            ((scroll_offset / full_row_height).floor()).max(0.) as usize,
+            pow2,
+        )
+        .clamp(1, row_count);
+
+        let visible_to = round_up_to_pow2(
+            (((scroll_offset + visible_rect_size) / full_row_height).ceil()).max(0.) as usize,
+            pow2,
+        )
+        .clamp(visible_from, row_count);
 
         if visible_from > 1 {
             // Draw empty cell from 1..next_visible_from
