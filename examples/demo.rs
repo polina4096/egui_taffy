@@ -764,12 +764,22 @@ fn virtual_grid_demo(ctx: &egui::Context, state: &mut State) {
                                 let mut container = None;
 
                                 for cidx in 1..=2 {
-                                    tui.id(idgen()).mut_style(&mut_grid_row_param).add_ext(
-                                        |tui, cont| {
-                                            tui.label(format!("Cell {} {}", info.idx, cidx));
+                                    tui.id(idgen())
+                                        .mut_style(&mut_grid_row_param)
+                                        .mut_style(|style| {
+                                            style.padding = length(2.);
+                                        })
+                                        .add_ext(|tui, cont| {
+                                            let _ = tui
+                                                .style(taffy::Style {
+                                                    padding: length(4.),
+                                                    ..Default::default()
+                                                })
+                                                .button(|tui| {
+                                                    tui.label(format!("Cell {} {}", info.idx, cidx))
+                                                });
                                             container = Some(cont);
-                                        },
-                                    );
+                                        });
                                 }
 
                                 VirtualGridRowInfo {
@@ -778,11 +788,26 @@ fn virtual_grid_demo(ctx: &egui::Context, state: &mut State) {
                             },
                         );
 
-                        for ridx in 1..=header_row_count {
+                        tui.sticky([false, true].into())
+                            .style(taffy::Style {
+                                flex_direction: taffy::FlexDirection::Column,
+                                grid_row: style_helpers::line(1),
+                                padding: length(4.),
+                                align_items: Some(taffy::AlignItems::Center),
+                                grid_column: span(2),
+                                ..Default::default()
+                            })
+                            .id(tid(("header", 1)))
+                            .add_with_background_color(|tui| {
+                                tui.label("Colspan 2 header");
+                            });
+
+                        for ridx in 2..=header_row_count {
                             for idx in 0..2 {
                                 tui.sticky([false, true].into())
                                     .style(taffy::Style {
                                         grid_row: style_helpers::line(ridx as i16),
+                                        padding: length(4.),
                                         ..Default::default()
                                     })
                                     .id(tid(("header", ridx, idx)))

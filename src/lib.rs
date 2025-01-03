@@ -565,7 +565,7 @@ impl Tui {
         limit: Option<f32>,
         content: impl FnOnce(&mut Ui) -> T,
     ) -> T {
-        let style = params.style.get_or_insert_with(|| Style::default());
+        let style = params.style.get_or_insert_with(Style::default);
 
         style.overflow = taffy::Point {
             x: taffy::Overflow::Visible,
