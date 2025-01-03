@@ -1,7 +1,11 @@
 use egui::Vec2b;
-use egui_taffy::{tui, TuiBuilderLogic};
+use egui_taffy::{
+    tid, tui,
+    virtual_tui::{VirtualGridRowHelper, VirtualGridRowHelperParams, VirtualGridRowInfo},
+    TuiBuilderLogic,
+};
 use taffy::{
-    prelude::{auto, fr, length, percent, repeat, span},
+    prelude::{auto, fr, length, min_content, percent, repeat, span},
     style_helpers, Style,
 };
 
@@ -37,6 +41,8 @@ fn main() -> eframe::Result {
         overflow_demo(ctx);
 
         grid_sticky(ctx);
+
+        virtual_grid_demo(ctx);
     })
 }
 
@@ -645,4 +651,77 @@ fn grid_sticky(ctx: &egui::Context) {
                     });
                 });
         });
+}
+
+fn virtual_grid_demo(ctx: &egui::Context) {
+    egui::Window::new("Virtual grid demo").show(ctx, |ui| {
+        tui(ui, ui.id().with("sticky grid demo"))
+            .reserve_available_space()
+            .style(taffy::Style {
+                flex_direction: taffy::FlexDirection::Column,
+                size: percent(1.),
+                max_size: percent(1.),
+                ..Default::default()
+            })
+            .show(|tui| {
+                tui.style(taffy::Style {
+                    display: taffy::Display::Grid,
+                    overflow: taffy::Point {
+                        x: taffy::Overflow::Visible,
+                        y: taffy::Overflow::Scroll,
+                    },
+                    grid_template_columns: vec![auto(), auto()],
+                    size: taffy::Size {
+                        width: percent(1.),
+                        height: auto(),
+                    },
+                    max_size: percent(1.),
+                    grid_auto_rows: vec![min_content()],
+                    ..Default::default()
+                })
+                .add(|tui| {
+                    let header_row_count = 2;
+
+                    VirtualGridRowHelper::show(
+                        VirtualGridRowHelperParams {
+                            header_row_count,
+                            row_count: 100000,
+                        },
+                        tui,
+                        |tui, info| {
+                            let mut idgen = info.id_gen();
+                            let mut_grid_row_param = info.grid_row_setter();
+                            let mut container = None;
+
+                            for cidx in 1..=2 {
+                                tui.id(idgen()).mut_style(&mut_grid_row_param).add_ext(
+                                    |tui, cont| {
+                                        tui.label(format!("Cell {} {}", info.idx, cidx));
+                                        container = Some(cont);
+                                    },
+                                );
+                            }
+
+                            VirtualGridRowInfo {
+                                container: container.unwrap(),
+                            }
+                        },
+                    );
+
+                    for ridx in 1..=header_row_count {
+                        for idx in 0..2 {
+                            tui.sticky([false, true].into())
+                                .style(taffy::Style {
+                                    grid_row: style_helpers::line(ridx as i16),
+                                    ..Default::default()
+                                })
+                                .id(tid(("header", ridx, idx)))
+                                .add_with_background_color(|tui| {
+                                    tui.label(format!("Column {} {}", ridx, idx));
+                                });
+                        }
+                    }
+                });
+            });
+    });
 }

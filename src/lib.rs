@@ -20,6 +20,9 @@ pub mod widgets;
 /// Implemets functionality for egui widgets to be used as taffy leaf containers
 mod egui_widgets;
 
+/// Helper functionality for virtual elements
+pub mod virtual_tui;
+
 /// Helper function to initialize taffy layout
 pub fn tui(ui: &mut egui::Ui, id: impl Into<egui::Id>) -> TuiInitializer<'_> {
     TuiInitializer {
@@ -151,9 +154,9 @@ pub struct Tui {
     current_id: egui::Id,
     current_node: Option<NodeId>,
     current_node_index: usize,
-    last_child_count: usize,
-
-    parent_rect: egui::Rect,
+    current_viewport: egui::Rect,
+    current_viewport_content: egui::Rect,
+    current_rect: egui::Rect,
     last_scroll_offset: egui::Vec2,
 
     used_items: HashSet<egui::Id>,
@@ -198,8 +201,9 @@ impl Tui {
             ui,
             current_node: None,
             current_node_index: 0,
-            last_child_count: 0,
-            parent_rect: root_rect,
+            current_rect: root_rect,
+            current_viewport: root_rect,
+            current_viewport_content: root_rect,
             used_items: Default::default(),
             root_rect,
             available_space,
@@ -259,22 +263,34 @@ impl Tui {
             };
 
             if let Some(current_node) = self.current_node {
-                if child_idx < self.last_child_count {
+                if child_idx < state.taffy.child_count(current_node) {
+                    // Check if child at position matches
                     if state.taffy.child_at_index(current_node, child_idx).unwrap() != node_id {
-                        state
-                            .taffy
-                            .replace_child_at_index(current_node, child_idx, node_id)
-                            .unwrap();
+                        // Remove element if it was attached to some node previously
+                        let parent = state.taffy.parent(node_id);
+                        if let Some(parent) = parent {
+                            state.taffy.remove_child(parent, node_id).unwrap();
+                        }
+
+                        // Add element (Child count could have changed)
+                        if child_idx < state.taffy.child_count(current_node) {
+                            state
+                                .taffy
+                                .replace_child_at_index(current_node, child_idx, node_id)
+                                .unwrap();
+                        } else {
+                            state.taffy.add_child(current_node, node_id).unwrap();
+                        }
                     }
                 } else {
+                    // Add element to the end
                     state.taffy.add_child(current_node, node_id).unwrap();
-                    self.last_child_count += 1;
                 }
             }
 
             let container = TaffyContainerUi {
                 layout: state.layout(node_id),
-                parent_rect: self.parent_rect,
+                parent_rect: self.current_rect,
                 first_frame,
                 sticky,
                 last_scroll_offset: self.last_scroll_offset,
@@ -285,7 +301,6 @@ impl Tui {
     }
 
     /// Add child taffy node to the layout with optional function to draw background
-
     fn add_child<FR, B>(
         &mut self,
         params: TuiBuilderParams,
@@ -298,6 +313,7 @@ impl Tui {
         self.add_child_dyn(params, Box::new(background_draw), Box::new(f))
     }
 
+    #[allow(clippy::type_complexity)]
     fn add_child_dyn<'a, 'b, FR, BR>(
         &mut self,
         params: TuiBuilderParams,
@@ -324,25 +340,20 @@ impl Tui {
 
         let stored_id = self.current_id;
         let stored_node = self.current_node;
-        let stored_node_index = self.current_node_index;
-        let stored_last_child_count = self.last_child_count;
-        let stored_parent_rect = self.parent_rect;
+        let stored_current_node_index = self.current_node_index;
+        let stored_current_rect = self.current_rect;
 
         let mut full_container_max_rect = taffy_container.full_container();
         full_container_max_rect = if full_container_max_rect.any_nan() {
-            self.parent_rect
+            self.current_rect
         } else {
             full_container_max_rect
         };
 
-        Self::with_state(self.main_id, self.ui.ctx().clone(), |state| {
-            self.current_node = Some(node_id);
-            self.current_node_index = 0;
-            self.last_child_count = state.taffy.child_count(node_id);
-
-            self.parent_rect = full_container_max_rect;
-            self.current_id = id;
-        });
+        self.current_id = id;
+        self.current_node = Some(node_id);
+        self.current_node_index = 0;
+        self.current_rect = full_container_max_rect;
 
         let mut bg = match background_draw.simulate_execution() {
             Some(val) => val,
@@ -447,14 +458,25 @@ impl Tui {
                         );
 
                         let mut rect = ui.min_rect();
-                        let mut offset = rect.min - self.parent_rect.min;
+                        let mut offset = rect.min - self.current_rect.min;
+
+                        let stored_viewport = self.current_viewport;
+                        let stored_viewport_content = self.current_viewport_content;
+
+                        self.current_viewport = self.current_rect;
+                        self.current_viewport_content = rect;
                         std::mem::swap(&mut self.last_scroll_offset, &mut offset);
-                        std::mem::swap(&mut self.parent_rect, &mut rect);
+                        std::mem::swap(&mut self.current_rect, &mut rect);
                         std::mem::swap(ui, &mut self.ui);
+
                         let resp = f(self, taffy_container, &mut bg);
+
                         std::mem::swap(ui, &mut self.ui);
-                        std::mem::swap(&mut self.parent_rect, &mut rect);
+                        std::mem::swap(&mut self.current_rect, &mut rect);
                         std::mem::swap(&mut self.last_scroll_offset, &mut offset);
+                        self.current_viewport_content = stored_viewport_content;
+                        self.current_viewport = stored_viewport;
+
                         resp
                     });
                 scroll.inner
@@ -469,7 +491,7 @@ impl Tui {
         Self::with_state(self.main_id, self.ui.ctx().clone(), |state| {
             let mut current_cnt = state.taffy.child_count(node_id);
 
-            while current_cnt > self.last_child_count {
+            while current_cnt > self.current_node_index {
                 state
                     .taffy
                     .remove_child_at_index(node_id, current_cnt - 1)
@@ -480,9 +502,8 @@ impl Tui {
 
         self.current_id = stored_id;
         self.current_node = stored_node;
-        self.current_node_index = stored_node_index;
-        self.last_child_count = stored_last_child_count;
-        self.parent_rect = stored_parent_rect;
+        self.current_node_index = stored_current_node_index;
+        self.current_rect = stored_current_rect;
 
         TaffyMainBackgroundReturnValues {
             main: fg,
@@ -787,6 +808,16 @@ impl Tui {
     pub fn current_id(&self) -> egui::Id {
         self.current_id
     }
+
+    /// Last viewport rect (Full tui layout or last scrollable element)
+    pub fn current_viewport(&self) -> egui::Rect {
+        self.current_viewport
+    }
+
+    /// Current viewport content rect (Full tui layout or last scrollable element content rect)
+    pub fn current_viewport_content(&self) -> egui::Rect {
+        self.current_viewport_content
+    }
 }
 
 /// Tui returned information about final layout of the Tui
@@ -840,12 +871,21 @@ impl TaffyContainerUi {
 
     /// Full container size
     pub fn full_container(&self) -> egui::Rect {
+        self.full_container_with(true)
+    }
+
+    /// Full container size
+    pub fn full_container_with(&self, scroll_offset: bool) -> egui::Rect {
         let layout = &self.layout;
         let rect = egui::Rect::from_min_size(
             Pos2::new(layout.location.x, layout.location.y),
             egui::Vec2::new(layout.size.width, layout.size.height),
         );
-        rect.translate(self.parent_rect.min.to_vec2() - self.sticky_offset())
+        let mut offset = self.parent_rect.min.to_vec2();
+        if scroll_offset {
+            offset += -self.sticky_offset();
+        }
+        rect.translate(offset)
     }
 
     /// Full container rect without border
@@ -1327,7 +1367,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 response
             },
             |tui, _, bg_response| {
-                let visuals = *tui.egui_ui().style().interact(&bg_response);
+                let visuals = *tui.egui_ui().style().interact(bg_response);
                 let egui_style = tui.egui_style_mut();
                 egui_style.interaction.selectable_labels = false;
                 egui_style.visuals.widgets.inactive = visuals;
@@ -1367,7 +1407,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 response
             },
             |tui, _, bg_response| {
-                let visuals = *tui.egui_ui().style().interact(&bg_response);
+                let visuals = *tui.egui_ui().style().interact(bg_response);
                 let egui_style = tui.egui_style_mut();
                 egui_style.interaction.selectable_labels = false;
                 egui_style.visuals.widgets.inactive = visuals;
@@ -1393,6 +1433,14 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     ) -> TaffyMainBackgroundReturnValues<FR, BR> {
         let tui = self.tui();
         tui.tui.add_child(tui.params, content, f)
+    }
+
+    /// Add tui node as children to this node with additional information about container
+    fn add_ext<FR>(self, f: impl FnOnce(&mut Tui, TaffyContainerUi) -> FR) -> FR {
+        let tui = self.tui();
+        tui.tui
+            .add_child(tui.params, (), |tui, container, _| f(tui, container))
+            .main
     }
 
     /// Add scroll area egui Ui
