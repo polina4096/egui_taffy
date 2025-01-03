@@ -96,10 +96,13 @@ impl VirtualGridRowHelper {
         let scroll_offset = -(tui.last_scroll_offset.y + top_offset);
         let visible_rect_size = tui.current_viewport().size().y;
 
-        let visible_from =
-            ((scroll_offset / full_row_height).floor().max(0.) as usize).clamp(1, row_count);
+        let buffer = 2.;
+        let visible_from = (((scroll_offset / full_row_height).floor() - buffer).max(0.) as usize)
+            .clamp(1, row_count);
 
-        let visible_to = ((((scroll_offset + visible_rect_size) / full_row_height).floor() + 1.)
+        let visible_to = ((((scroll_offset + visible_rect_size) / full_row_height).floor()
+            + 1.
+            + buffer)
             .max(0.) as usize)
             .clamp(visible_from, row_count);
 
@@ -112,7 +115,7 @@ impl VirtualGridRowHelper {
             grid_row += 1;
 
             let size = taffy::Size {
-                width: auto(),
+                width: length(0.),
                 height: length(height),
             };
 

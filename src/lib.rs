@@ -272,15 +272,21 @@ impl Tui {
                             state.taffy.remove_child(parent, node_id).unwrap();
                         }
 
-                        // Add element (Child count could have changed)
-                        if child_idx < state.taffy.child_count(current_node) {
+                        // Layout has changed, remove all following children
+                        //
+                        // Because node one by one removal is slow if items have changed their location.
+                        // Faster is to remove whole tail.
+                        let mut count = state.taffy.child_count(current_node);
+                        while child_idx < count {
+                            count -= 1;
                             state
                                 .taffy
-                                .replace_child_at_index(current_node, child_idx, node_id)
+                                .remove_child_at_index(current_node, count)
                                 .unwrap();
-                        } else {
-                            state.taffy.add_child(current_node, node_id).unwrap();
                         }
+
+                        // Add element to the end
+                        state.taffy.add_child(current_node, node_id).unwrap();
                     }
                 } else {
                     // Add element to the end
@@ -492,11 +498,11 @@ impl Tui {
             let mut current_cnt = state.taffy.child_count(node_id);
 
             while current_cnt > self.current_node_index {
+                current_cnt -= 1;
                 state
                     .taffy
-                    .remove_child_at_index(node_id, current_cnt - 1)
+                    .remove_child_at_index(node_id, current_cnt)
                     .unwrap();
-                current_cnt -= 1;
             }
         });
 
