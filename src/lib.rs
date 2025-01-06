@@ -1461,7 +1461,13 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             |ui: &mut egui::Ui, container: &TaffyContainerUi| {
                 let rect = container.full_container();
                 let response = ui.allocate_rect(rect, egui::Sense::click());
-                let visuals = ui.style().interact_selectable(&response, selected);
+
+                let mut visuals = ui.style().interact_selectable(&response, selected);
+
+                if response.hovered() && selected {
+                    // Add visual effect even if button is selected
+                    visuals.weak_bg_fill = ui.style().visuals.gray_out(visuals.weak_bg_fill);
+                }
 
                 let painter = ui.painter();
                 let stroke = visuals.bg_stroke;
