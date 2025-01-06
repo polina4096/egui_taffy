@@ -15,6 +15,7 @@ This library is in active development and some breaking changes are expected, bu
 
 | egui_taffy | egui | taffy |
 | ---      | ---  | ---   |
+| dev      | 0.30 | 0.7.2 |
 | 0.5      | 0.30 | 0.7   |
 | 0.4      | 0.30 | 0.7   |
 | 0.3      | 0.29 | 0.7   | 

@@ -77,7 +77,7 @@ impl TuiWidget for TaffySeparator {
                 })
                 .inner
             },
-            |tui, _, _| {
+            |tui, _| {
                 let _ = tui;
             },
         );

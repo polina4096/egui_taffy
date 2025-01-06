@@ -1,5 +1,15 @@
 # Changelog
 
+## dev
+
+Release improves element background drawing API and exposes internal taffy state to allow implementing additional functionality.
+
+Added support for virtual table rows. Now it is possible to draw tables with millions of rows in the same size and only visible rows will be drawn.
+
+* Support virtual table rows. See demo.
+* Added MSRV 1.81.
+* Expose internal taffy tree state.
+
 ## 0.5
 
 Release adds support for scrollable elements, handling overflow style parameter and sticky elements!

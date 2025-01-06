@@ -1,6 +1,6 @@
 use taffy::prelude::{auto, length};
 
-use crate::{sum_axis, tid, TaffyContainerUi, Tui, TuiBuilderLogic, TuiId};
+use crate::{tid, Tui, TuiBuilderLogic, TuiId};
 
 /// Required parameters to correctly draw grid with virtual rows
 pub struct VirtualGridRowHelperParams {
@@ -43,12 +43,6 @@ impl VirtualGridRow {
     }
 }
 
-/// Necessary information about grid item to draw correct virtual grid
-pub struct VirtualGridRowInfo {
-    /// Container value from any cell in the row
-    pub container: TaffyContainerUi,
-}
-
 const fn round_up_to_pow2(value: usize, pow2: u8) -> usize {
     value.saturating_add((1 << pow2) - 1) & !((1 << pow2) - 1)
 }
@@ -61,20 +55,11 @@ impl VirtualGridRowHelper {
     /// Show virtual grid rows.
     ///
     /// Closure receives information about grid row that needs to be drawn.
-    /// Closure needs to return information about any cell that has full height in the grid row.
-    /// All Rows should have equal heaight. One row will be used to estimate height of all rows.
+    /// All virtual rows should have equal heaight. One row will be used to estimate height of all rows.
     pub fn show<F>(params: VirtualGridRowHelperParams, tui: &mut Tui, mut draw_line: F)
     where
-        F: FnMut(&mut Tui, VirtualGridRow) -> VirtualGridRowInfo,
+        F: FnMut(&mut Tui, VirtualGridRow),
     {
-        let gap = match tui.current_style().gap.height {
-            taffy::LengthPercentage::Length(length) => length,
-            taffy::LengthPercentage::Percent(_) => {
-                // TODO: Not supported yet
-                0.
-            }
-        };
-
         let VirtualGridRowHelperParams {
             row_count,
             header_row_count,
@@ -87,38 +72,104 @@ impl VirtualGridRowHelper {
         let mut grid_row = header_row_count + 1;
 
         // Draw first row for reference
-        let info = draw_line(tui, VirtualGridRow { idx: 0, grid_row });
+        draw_line(tui, VirtualGridRow { idx: 0, grid_row });
 
         if row_count == 1 {
             return;
         }
 
-        let full_container = info.container.full_container_with(false);
+        let node_id = tui.current_node();
 
-        let row_height = full_container.height();
-        let top_offset = (full_container.min - tui.current_viewport_content().min).y;
-        let margin = info.container.layout().margin;
+        let min_location = (tui.taffy_container().full_container_with(false).min
+            - tui.current_viewport_content().min)
+            .y;
 
-        let full_row_height = row_height + sum_axis(&margin).height + gap;
+        let (top_offset, row_height, gap) = tui.with_state(|state| {
+            let style = state.taffy_tree().style(node_id).unwrap();
+
+            let gap = match style.gap.height {
+                taffy::LengthPercentage::Length(length) => length,
+                taffy::LengthPercentage::Percent(_) => {
+                    // TODO: Not supported yet
+                    0.
+                }
+            };
+
+            let mut top_offset = match style.overflow.y {
+                taffy::Overflow::Visible | taffy::Overflow::Clip | taffy::Overflow::Hidden => {
+                    min_location
+                }
+                taffy::Overflow::Scroll => 0.,
+            };
+            // TODO: Replace with taffy_tree() call when
+            // (https://github.com/DioxusLabs/taffy/issues/778) is fixed.
+            let layout_detailed_info = state.taffy_tree.detailed_layout_info(node_id);
+
+            match layout_detailed_info {
+                taffy::DetailedLayoutInfo::Grid(detailed_grid_info) => {
+                    // Calculate header offset
+                    for idx in 0..((grid_row - 1) as usize) {
+                        if let Some(row_size) = detailed_grid_info.rows.sizes.get(idx) {
+                            top_offset += row_size;
+                        } else {
+                            break;
+                        }
+                        if let Some(gutter) = detailed_grid_info.rows.gutters.get(idx) {
+                            top_offset += gutter;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    let row_height = detailed_grid_info
+                        .rows
+                        .sizes
+                        .get((grid_row - 1) as usize)
+                        .copied()
+                        .unwrap_or(20.);
+
+                    (top_offset, row_height, gap)
+                }
+                taffy::DetailedLayoutInfo::None => (top_offset, 20., gap),
+            }
+        });
+
+        let full_row_height = row_height + gap;
 
         let scroll_offset = -(tui.last_scroll_offset.y + top_offset);
         let visible_rect_size = tui.current_viewport().size().y;
 
         // Round to power of 2 numbers to reduce frequency of taffy layout recalculation
         // TODO: Maybe store interval in memory?
-        let pow2 = 4; // 2^3 = 16
+        let pow2 = 3; // 2^3 = 8
+
+        // How many items should be drawn at top and bottom
+        let buffer = 4.;
 
         let visible_from = round_down_to_pow2(
-            ((scroll_offset / full_row_height).floor()).max(0.) as usize,
+            ((scroll_offset / full_row_height).floor() - buffer).max(0.) as usize,
             pow2,
         )
         .clamp(1, row_count);
 
         let visible_to = round_up_to_pow2(
-            (((scroll_offset + visible_rect_size) / full_row_height).ceil()).max(0.) as usize,
+            (((scroll_offset + visible_rect_size) / full_row_height).ceil() + buffer).max(0.)
+                as usize,
             pow2,
         )
         .clamp(visible_from, row_count);
+
+        println!(
+            "{} {} {} | {} {} {} {} {}",
+            visible_from,
+            visible_to,
+            row_count,
+            row_height,
+            gap,
+            scroll_offset,
+            top_offset,
+            visible_rect_size
+        );
 
         if visible_from > 1 {
             // Draw empty cell from 1..next_visible_from

@@ -1,7 +1,7 @@
 use egui::Vec2b;
 use egui_taffy::{
     tid, tui,
-    virtual_tui::{VirtualGridRowHelper, VirtualGridRowHelperParams, VirtualGridRowInfo},
+    virtual_tui::{VirtualGridRowHelper, VirtualGridRowHelperParams},
     TuiBuilderLogic,
 };
 use taffy::{
@@ -367,6 +367,7 @@ fn flex_demo(ctx: &egui::Context, state: &mut State) {
     egui::Window::new("Flex demo")
         .scroll(Vec2b { x: true, y: true })
         .open(&mut state.show_flex_demo)
+        .default_width(500.)
         .show(ctx, |ui| {
             let default_style = || Style {
                 gap: length(8.),
@@ -761,29 +762,32 @@ fn virtual_grid_demo(ctx: &egui::Context, state: &mut State) {
                             |tui, info| {
                                 let mut idgen = info.id_gen();
                                 let mut_grid_row_param = info.grid_row_setter();
-                                let mut container = None;
 
-                                for cidx in 1..=2 {
-                                    tui.id(idgen())
+                                if (info.grid_row & 1) != 0 {
+                                    for cidx in 1..=2 {
+                                        let _ = tui
+                                            .id(idgen())
+                                            .mut_style(&mut_grid_row_param)
+                                            .mut_style(|style| {
+                                                style.padding = length(2.);
+                                            })
+                                            .button(|tui| {
+                                                tui.label(format!("Cell {} {}", info.idx, cidx))
+                                            });
+                                    }
+                                } else {
+                                    let _ = tui
+                                        .id(idgen())
                                         .mut_style(&mut_grid_row_param)
                                         .mut_style(|style| {
                                             style.padding = length(2.);
+                                            style.grid_column = span(2);
+                                            style.justify_content =
+                                                Some(taffy::AlignContent::SpaceAround);
                                         })
-                                        .add_ext(|tui, cont| {
-                                            let _ = tui
-                                                .style(taffy::Style {
-                                                    padding: length(4.),
-                                                    ..Default::default()
-                                                })
-                                                .button(|tui| {
-                                                    tui.label(format!("Cell {} {}", info.idx, cidx))
-                                                });
-                                            container = Some(cont);
+                                        .button(|tui| {
+                                            tui.label(format!("Cell {} - Colspan 2", info.idx))
                                         });
-                                }
-
-                                VirtualGridRowInfo {
-                                    container: container.unwrap(),
                                 }
                             },
                         );

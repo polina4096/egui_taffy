@@ -14,7 +14,10 @@ rust-version = "1.81"
 [dependencies]
 egui = { version = "0.30", default-features = false }
 log = { version = "0.4", default-features = false }
-taffy = { version = "0.7", default-features = false, features = ["taffy_tree"] }
+taffy = { version = "0.7.2", default-features = false, features = [
+  "taffy_tree",
+  "detailed_layout_info",
+] }
 
 [features]
 default = ["taffy_default"]
