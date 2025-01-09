@@ -1413,7 +1413,11 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
     /// Add tui node with background that acts as egui button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
-    fn button<T>(self, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
+    fn filled_button<T>(
+        self,
+        fill: Option<egui::Color32>,
+        f: impl FnOnce(&mut Tui) -> T,
+    ) -> TuiInnerResponse<T> {
         let tui = self.with_border_style_from_egui_style();
 
         let return_values = tui.tui.add_child(
@@ -1428,7 +1432,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 painter.rect(
                     rect.shrink(stroke.width),
                     visuals.rounding,
-                    visuals.weak_bg_fill,
+                    fill.unwrap_or(visuals.weak_bg_fill),
                     stroke,
                 );
 
@@ -1449,6 +1453,12 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             inner: return_values.main,
             response: return_values.background,
         }
+    }
+
+    /// Add tui node with background that acts as egui button
+    #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
+    fn button<T>(self, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
+        self.filled_button(None, f)
     }
 
     /// Add tui node with background that acts as selectable button
