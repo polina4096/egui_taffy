@@ -1415,7 +1415,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
     fn filled_button<T>(
         self,
-        fill: Option<egui::Color32>,
+        target_tint_color: Option<egui::Color32>,
         f: impl FnOnce(&mut Tui) -> T,
     ) -> TuiInnerResponse<T> {
         let tui = self.with_border_style_from_egui_style();
@@ -1429,12 +1429,12 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
                 let painter = ui.painter();
                 let stroke = visuals.bg_stroke;
-                painter.rect(
-                    rect.shrink(stroke.width),
-                    visuals.rounding,
-                    fill.unwrap_or(visuals.weak_bg_fill),
-                    stroke,
-                );
+
+                let mut bg_fill = visuals.weak_bg_fill;
+                if let Some(fill) = target_tint_color {
+                    bg_fill = egui::ecolor::tint_color_towards(bg_fill, fill);
+                }
+                painter.rect(rect.shrink(stroke.width), visuals.rounding, bg_fill, stroke);
 
                 response
             },
