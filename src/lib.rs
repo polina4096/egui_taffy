@@ -3,6 +3,7 @@
 #![doc = include_str!("../README.md")]
 
 use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 
 use egui::util::IdTypeMap;
@@ -1293,6 +1294,23 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     fn egui_style(self, style: Arc<egui::Style>) -> TuiBuilder<'r> {
         let mut tui = self.tui();
         tui.params.egui_style = Some(style);
+        tui
+    }
+
+    /// Mutate child element egui style
+    #[inline]
+    fn mut_egui_style(self, f: impl FnOnce(&mut egui::Style)) -> TuiBuilder<'r> {
+        let mut tui = self.tui();
+
+        // Unpack style efficiently
+        let mut style = if let Some(style) = tui.params.egui_style {
+            Arc::unwrap_or_clone(style)
+        } else {
+            tui.builder_tui().egui_ui().style().deref().clone()
+        };
+        f(&mut style);
+
+        tui.params.egui_style = Some(Arc::new(style));
         tui
     }
 
