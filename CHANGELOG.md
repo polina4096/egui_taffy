@@ -1,14 +1,21 @@
 # Changelog
 
-## dev
+## 0.6
 
-Release improves element background drawing API and exposes internal taffy state to allow implementing additional functionality.
+Release improves element background drawing API and exposes internal taffy state to allow implementing additional functionality like virtual grids, table backgrounds, etc.
 
 Added support for virtual table rows. Now it is possible to draw tables with millions of rows in the same size and only visible rows will be drawn.
 
 * Support virtual table rows. See demo.
-* Added MSRV 1.81.
-* Expose internal taffy tree state.
+* Added MSRV 1.81. (PR: https://github.com/PPakalns/egui_taffy/pull/10 by @boxofrox)
+* Expose internal taffy tree state for accessing calculated detailed layout information.
+* Web demo (PR: https://github.com/PPakalns/egui_taffy/pull/8 by @TheRustyPickle)
+* Added `tui.mut_egui_style(|style| { ... })` function to mutate egui style.
+* Added `tui.colored_button(color, |tui| { ... })` helper function.
+* Better support for egui::ProgressBar sizing.
+* Added `tui.add_with_background_color(...)` helper function.
+* Taffy 0.7.3 is required.
+* API changes for drawing background UI.
 
 ## 0.5
 
