@@ -1,8 +1,7 @@
-use eframe::{App, Frame};
 use eframe::egui::{self, Vec2b};
-use egui::Vec2b;
+use eframe::{App, Frame};
 use egui_taffy::{
-    tid, tui,
+    taffy, tid, tui,
     virtual_tui::{VirtualGridRowHelper, VirtualGridRowHelperParams},
     TuiBuilderLogic,
 };
@@ -12,8 +11,22 @@ use taffy::{
 };
 
 #[derive(Default)]
-struct MyApp {
+pub struct MyApp {
     state: State,
+}
+
+#[derive(Default)]
+pub struct State {
+    grow_variables: Option<GrowVariables>,
+    button_params: ButtonParams,
+    show_flex_grid_demo: bool,
+    show_flex_demo: bool,
+    show_flex_wrap_demo: bool,
+    show_grow_demo: bool,
+    show_button_demo: bool,
+    show_overflow_demo: bool,
+    show_grid_sticky_demo: bool,
+    show_virtual_grid_demo: bool,
 }
 
 impl App for MyApp {
@@ -34,40 +47,25 @@ impl App for MyApp {
             style.wrap_mode = Some(egui::TextWrapMode::Extend);
         });
 
-        ui_side_panel(ctx, &mut state);
+        ui_side_panel(ctx, state);
 
-        flex_grid_demo(ctx, &mut state);
+        flex_grid_demo(ctx, state);
 
-        flex_demo(ctx, &mut state);
+        flex_demo(ctx, state);
 
-        flex_wrap_demo(ctx, &mut state);
+        flex_wrap_demo(ctx, state);
 
-        grow_demo(ctx, &mut state);
+        grow_demo(ctx, state);
 
-        button_demo(ctx, &mut state);
+        button_demo(ctx, state);
 
-        overflow_demo(ctx, &mut state);
+        overflow_demo(ctx, state);
 
-        grid_sticky(ctx, &mut state);
+        grid_sticky(ctx, state);
 
-        virtual_grid_demo(ctx, &mut state);
+        virtual_grid_demo(ctx, state);
     }
 }
-
-#[derive(Default)]
-pub struct State {
-    grow_variables: Option<GrowVariables>,
-    button_params: ButtonParams,
-    show_flex_grid_demo: bool,
-    show_flex_demo: bool,
-    show_flex_wrap_demo: bool,
-    show_grow_demo: bool,
-    show_button_demo: bool,
-    show_overflow_demo: bool,
-    show_grid_sticky_demo: bool,
-    show_virtual_grid_demo: bool,
-}
-
 
 fn ui_side_panel(ctx: &egui::Context, state: &mut State) {
     egui::SidePanel::new(egui::panel::Side::Left, "panel").show(ctx, |ui| {
@@ -76,11 +74,13 @@ fn ui_side_panel(ctx: &egui::Context, state: &mut State) {
             .style(taffy::Style {
                 flex_direction: taffy::FlexDirection::Column,
                 align_items: Some(taffy::AlignItems::Stretch),
+                padding: length(4.),
                 gap: length(2.),
                 ..Default::default()
             })
             .show(|tui| {
-                tui.label("Demos:");
+                tui.heading("Demos:");
+
                 for (label, show) in [
                     ("Grid demo", &mut state.show_flex_grid_demo),
                     ("Flex demo", &mut state.show_flex_demo),
@@ -332,7 +332,7 @@ fn grow_demo(ctx: &egui::Context, state: &mut State) {
                     flex_direction: taffy::FlexDirection::Column,
                     size: percent(1.),
                     justify_items: Some(taffy::AlignItems::Center),
-                    align_items: Some(taffy::AlignItems::Center),
+                    align_items: Some(taffy::AlignItems::End),
                     ..default_style()
                 })
                 .show(|tui| {
@@ -836,55 +836,9 @@ fn virtual_grid_demo(ctx: &egui::Context, state: &mut State) {
 /// Native example
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
-    let app = MyApp::default();
     eframe::run_native(
         "Demo",
         Default::default(),
         Box::new(|_cc| Ok(Box::new(MyApp::default()))),
     )
-}
-
-/// Web example
-#[cfg(target_arch = "wasm32")]
-fn main() {
-    use eframe::wasm_bindgen::JsCast as _;
-    use eframe::{WebOptions, WebRunner};
-
-    let web_options = WebOptions::default();
-
-    wasm_bindgen_futures::spawn_local(async {
-        let document = web_sys::window()
-            .expect("No window")
-            .document()
-            .expect("No document");
-
-        let canvas = document
-            .get_element_by_id("the_canvas_id")
-            .expect("Failed to find the_canvas_id")
-            .dyn_into::<web_sys::HtmlCanvasElement>()
-            .expect("the_canvas_id was not a HtmlCanvasElement");
-
-        let start_result = WebRunner::new()
-            .start(
-                canvas,
-                web_options,
-                Box::new(|_cc| Ok(Box::new(MyApp::default()))),
-            )
-            .await;
-
-        // Remove the loading text and spinner:
-        if let Some(loading_text) = document.get_element_by_id("loading_text") {
-            match start_result {
-                Ok(_) => {
-                    loading_text.remove();
-                }
-                Err(e) => {
-                    loading_text.set_inner_html(
-                        "<p> The app has crashed. See the developer console for details. </p>",
-                    );
-                    panic!("Failed to start eframe: {e:?}");
-                }
-            }
-        }
-    });
 }

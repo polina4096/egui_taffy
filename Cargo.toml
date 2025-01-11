@@ -10,7 +10,7 @@ keywords = ["egui", "flexbox", "taffy", "layout", "ui"]
 categories = ["gui"]
 license = "MIT"
 rust-version = "1.81"
-exclude = ["/example", "/.github"]
+exclude = ["/.github", "./examples/web/"]
 
 [dependencies]
 egui = { version = "0.30", default-features = false }
@@ -30,3 +30,13 @@ taffy_default = [
   "taffy/grid",
   "taffy/std",
 ]
+
+[dev-dependencies]
+eframe = { version = "0.30", default-features = false, features = [
+  "accesskit",
+  "default_fonts",
+  "wgpu",
+  "wayland",
+  "web_screen_reader",
+  "x11",
+] }
