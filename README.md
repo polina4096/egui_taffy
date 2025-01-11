@@ -11,6 +11,8 @@ Flexible egui layout library that supports CSS Block, Flexbox, Grid layouts. It 
 
 This library is in active development and some breaking changes are expected, but they will be kept as small as possible.
 
+### 👉 [Web Demo](https://ppakalns.github.io/egui_taffy/) 👈 of the latest released version.
+
 ## Version compatibility
 
 | egui_taffy | egui | taffy | MSRV |
@@ -125,6 +127,12 @@ Preview:
 
 https://github.com/user-attachments/assets/07546146-7a90-422b-b291-99b758fd7704
 
+### Virtual grid (virtual table rows)
+
+Support grids with equal virtual row height. Rows can contain merged cells (`colspan`).
+
+https://github.com/user-attachments/assets/a3c8ebba-e72f-44c2-9233-29004b97d070
+
 ## Egui options
 
 ### Max passes
@@ -145,7 +153,11 @@ By default egui text wrapping tries to utilize as less width as possible. In dyn
 
 Instead you should use one of the following options:
 1. Specify minimal width or width for the elements, set text elements to fill width of the parent.
-2. Disable text wrapping:
+2. Set custom egui wrap mode when necessary.
+   ```rs
+   tui.wrap_mode(egui::TextWrapMode::Truncate).add(|tui| { ... })
+   ```
+3. Disable text wrapping:
    ```rs
    ctx.style_mut(|style| {
      style.wrap_mode = Some(egui::TextWrapMode::Extend);
