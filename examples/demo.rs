@@ -128,6 +128,11 @@ fn flex_wrap_demo(ctx: &egui::Context, state: &mut State) {
                 .style(Style {
                     flex_direction: taffy::FlexDirection::Column,
                     align_items: Some(taffy::AlignItems::Stretch),
+                    size: taffy::Size {
+                        width: percent(1.),
+                        height: auto(),
+                    },
+
                     ..default_style()
                 })
                 .show(|tui| {
