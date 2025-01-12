@@ -2,63 +2,56 @@
 
 ## 0.6
 
-Release improves element background drawing API and exposes internal taffy state to allow implementing additional functionality like virtual grids, table backgrounds, etc.
+This release improves the element background drawing API and exposes the internal Taffy state, allowing for the implementation of additional functionalities such as virtual grids and table backgrounds.
 
-Added support for virtual table rows. Now it is possible to draw tables with millions of rows in the same size and only visible rows will be drawn.
-
-* Support virtual table rows. See demo.
-* Added MSRV 1.81. (PR: https://github.com/PPakalns/egui_taffy/pull/10 by @boxofrox)
-* Expose internal taffy tree state for accessing calculated detailed layout information.
-* Web demo (PR: https://github.com/PPakalns/egui_taffy/pull/8 by @TheRustyPickle)
-* Added `tui.mut_egui_style(|style| { ... })` function to mutate egui style.
-* Added `tui.colored_button(color, |tui| { ... })` helper function.
-* Better support for egui::ProgressBar sizing.
-* Added `tui.add_with_background_color(...)` helper function.
-* Taffy 0.7.3 is required.
-* API changes for drawing background UI.
+- Support for virtual table rows, enabling the rendering of tables with millions of rows while only drawing the visible ones. See demo.
+- Added MSRV 1.81. (PR: [#10](https://github.com/PPakalns/egui_taffy/pull/10) by @boxofrox)
+- Exposed the internal Taffy tree state for accessing detailed layout information.
+- Web demo available. (PR: [#8](https://github.com/PPakalns/egui_taffy/pull/8) by @TheRustyPickle)
+- Added the `tui.mut_egui_style(|style| { ... })` function to mutate the Egui style.
+- Introduced the `tui.colored_button(color, |tui| { ... })` helper function.
+- Improved support for `egui::ProgressBar` sizing.
+- Added the `tui.add_with_background_color(...)` helper function.
+- Taffy 0.7.3 is now required.
+- API changes for drawing background UI.
 
 ## 0.5
 
-Release adds support for scrollable elements, handling overflow style parameter and sticky elements!
+This release adds support for scrollable elements, handling the overflow style parameter, and sticky elements!
 
-* Added support for elements that can scroll (`overflow: scroll`).
-  egui_taffy automatically adds `egui::ScrollArea` when overflow: `taffy::Overflow:Scroll` is set.
-* `add_with_border`, `button`, `selectable` methods now sets border_size value from egui::Style in taffy::Style if border size was set to default value (`Rect::zero()`).
-* Added support for sticky elements.
-* Added support for all `taffy::Overflow` values: Visible, Clip, Hidden, Scroll.
-* Added example for all overflow settings: Visible, Clip, Hidden, Scroll.
-* Added example for sticky row, column in scrollable grid.
-* `add_scroll_area` family of functions prefix was changed from "add"" to "ui" to imply that inner closure
-  takes `egui::Ui`.
-* `add_with_background`: background drawing function now takes additional argument (`&TaffyContainerUi`) 
-  which contains more precise information about layout that can be used to draw background.
-* Added `tui.colored_label(color, label)` helper method.
+- Added support for elements that can scroll (`overflow: scroll`). Egui_taffy automatically adds `egui::ScrollArea` when `taffy::Overflow:Scroll` is set.
+- The `add_with_border`, `button`, and `selectable` methods now set the border size value from `egui::Style` in `taffy::Style` if the border size was set to the default value (`Rect::zero()`).
+- Added support for sticky elements.
+- Added support for all `taffy::Overflow` values: Visible, Clip, Hidden, Scroll.
+- Added examples for all overflow settings: Visible, Clip, Hidden, Scroll.
+- Added examples for sticky rows and columns in a scrollable grid.
+- The `add_scroll_area` family of functions has been renamed from "add" to "ui" to imply that the inner closure takes `egui::Ui`.
+- The `add_with_background` function now takes an additional argument (`&TaffyContainerUi`), which provides more precise layout information for drawing the background.
+- Added the `tui.colored_label(color, label)` helper method.
 
 ## 0.4
 
-* Support egui 0.30
+- Support for Egui 0.30.
 
 ## 0.3
 
-Release adds support for more granular interaction with underlying `egui::Ui`.
-When creating child elements you can provide additional settings that are passed to `egui::UiBuilder`.
-(`egui::Layout`, `egui::Style`, `egui::TextWrapMode`, Disable descendant ui).
+This release adds support for more granular interaction with the underlying `egui::Ui`. When creating child elements, you can now provide additional settings that are passed to `egui::UiBuilder` (e.g., `egui::Layout`, `egui::Style`, `egui::TextWrapMode`, Disable descendant UI).
 
-* Removed lifetime requirement for `Tui` (previously `Tui<'a>`).
-* Added shorthand function for adding label with "strong" coloring. `tui.strong("label");`
-* Added helper function to set wrap mode for child layout `tui.wrap_mode(egui::TextWrapMode::...).add(|tui| ...)`.
-* Added methods to set up child element egui Ui style and layout: `tui.layout(egui::Layout::default()).egui_style(custom_egui_style).add(|tui| ...)`
+- Removed the lifetime requirement for `Tui` (previously `Tui<'a>`).
+- Added a shorthand function for adding a label with "strong" coloring: `tui.strong("label");`.
+- Added a helper function to set the wrap mode for child layouts: `tui.wrap_mode(egui::TextWrapMode::...).add(|tui| ...)`.
+- Added methods to set up child element Egui UI style and layout: `tui.layout(egui::Layout::default()).egui_style(custom_egui_style).add(|tui| ...)`.
 
 ## 0.2.1
 
-* Correctly support child element/node disabling (egui::Ui disable).
+- Correctly supported the disabling of child elements/nodes (`egui::Ui` disable).
 
 ## 0.2
 
-* Taffy updated to 0.7.
-* Added support for classic buttons and selectable buttons.
-* Added information to README about text wrapping.
+- Updated Taffy to 0.7.
+- Added support for classic buttons and selectable buttons.
+- Updated the README with information about text wrapping.
 
 ## 0.1
 
-Initial functionality
+Initial functionality.
