@@ -1349,49 +1349,48 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add tui node as children to this node and draw only background color
     fn add_with_background_color<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui();
-        tui.add_with_background_ui(
-            |ui, container| {
-                // TODO: Expand added to fill rounded gaps between elements
-                // How to correctly fill space between elements?
-                let rect = container.full_container().expand(1.);
 
-                let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
-                // Background is not transparent to events
+        fn background(ui: &mut egui::Ui, container: &TaffyContainerUi) {
+            // TODO: Expand added to fill rounded gaps between elements
+            // How to correctly fill space between elements?
+            let rect = container.full_container().expand(1.);
 
-                let visuals = ui.style().visuals.noninteractive();
-                let window_fill = ui.style().visuals.panel_fill;
+            let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+            // Background is not transparent to events
 
-                let painter = ui.painter();
-                painter.rect_filled(rect, visuals.rounding, window_fill);
-            },
-            |tui, _| f(tui),
-        )
-        .main
+            let visuals = ui.style().visuals.noninteractive();
+            let window_fill = ui.style().visuals.panel_fill;
+
+            let painter = ui.painter();
+            painter.rect_filled(rect, visuals.rounding, window_fill);
+        }
+
+        tui.add_with_background_ui(background, |tui, _| f(tui)).main
     }
 
     /// Add tui node as children to this node and draw popup background
     fn add_with_background<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui().with_border_style_from_egui_style();
-        let return_values = tui.add_with_background_ui(
-            |ui, container| {
-                let rect = container.full_container();
-                let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
-                // Background is not transparent to events
 
-                let visuals = ui.style().visuals.noninteractive();
-                let window_fill = ui.style().visuals.panel_fill;
+        fn background(ui: &mut egui::Ui, container: &TaffyContainerUi) {
+            let rect = container.full_container();
+            let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+            // Background is not transparent to events
 
-                let painter = ui.painter();
-                let stroke = visuals.bg_stroke;
-                painter.rect(
-                    rect.shrink(stroke.width),
-                    visuals.rounding,
-                    window_fill,
-                    stroke,
-                );
-            },
-            |tui, _| f(tui),
-        );
+            let visuals = ui.style().visuals.noninteractive();
+            let window_fill = ui.style().visuals.panel_fill;
+
+            let painter = ui.painter();
+            let stroke = visuals.bg_stroke;
+            painter.rect(
+                rect.shrink(stroke.width),
+                visuals.rounding,
+                window_fill,
+                stroke,
+            );
+        }
+
+        let return_values = tui.add_with_background_ui(background, |tui, _| f(tui));
         return_values.main
     }
 
@@ -1412,20 +1411,19 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
     /// Add tui node as children to this node and draw simple group Frame background
     fn add_with_border<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
+        fn background(ui: &mut egui::Ui, container: &TaffyContainerUi) {
+            let visuals = ui.style().noninteractive();
+            let rect = container.full_container();
+
+            // Background is transparent to events
+            let stroke = visuals.bg_stroke;
+            ui.painter()
+                .rect_stroke(rect.shrink(stroke.width), visuals.rounding, stroke);
+        }
+
         let return_values = self
             .with_border_style_from_egui_style()
-            .add_with_background_ui(
-                |ui, container| {
-                    let visuals = ui.style().noninteractive();
-                    let rect = container.full_container();
-
-                    // Background is transparent to events
-                    let stroke = visuals.bg_stroke;
-                    ui.painter()
-                        .rect_stroke(rect.shrink(stroke.width), visuals.rounding, stroke);
-                },
-                |tui, _| f(tui),
-            );
+            .add_with_background_ui(background, |tui, _| f(tui));
         return_values.main
     }
 
