@@ -1444,18 +1444,10 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             ui.allocate_rect(rect, egui::Sense::click())
         }
 
-        fn setup_visuals(tui: &mut Tui, bg_response: &Response) {
-            let visuals = *tui.egui_ui().style().interact(bg_response);
-            let egui_style = tui.egui_style_mut();
-            egui_style.interaction.selectable_labels = false;
-            egui_style.visuals.widgets.inactive = visuals;
-            egui_style.visuals.widgets.noninteractive = visuals;
-        }
-
         let return_values = tui
             .tui
             .add_child(tui.params, background, |tui, bg_response| {
-                setup_visuals(tui, bg_response);
+                setup_tui_visuals(tui, bg_response);
                 f(tui)
             });
 
@@ -1495,21 +1487,13 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             response
         }
 
-        fn setup_visuals(tui: &mut Tui, bg_response: &Response) {
-            let visuals = *tui.egui_ui().style().interact(bg_response);
-            let egui_style = tui.egui_style_mut();
-            egui_style.interaction.selectable_labels = false;
-            egui_style.visuals.widgets.inactive = visuals;
-            egui_style.visuals.widgets.noninteractive = visuals;
-        }
-
         let return_values = tui.tui.add_child(
             tui.params,
             |ui: &mut egui::Ui, container: &TaffyContainerUi| {
                 background(ui, container, target_tint_color)
             },
             |tui, bg_response| {
-                setup_visuals(tui, bg_response);
+                setup_tui_visuals(tui, bg_response);
 
                 f(tui)
             },
@@ -1555,20 +1539,11 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             response
         }
 
-        fn setup_visuals(tui: &mut Tui, bg_response: &Response) {
-            let visuals = *tui.egui_ui().style().interact(bg_response);
-            let egui_style = tui.egui_style_mut();
-            egui_style.interaction.selectable_labels = false;
-            egui_style.visuals.widgets.inactive = visuals;
-            egui_style.visuals.widgets.noninteractive = visuals;
-        }
-
         let return_values = tui.tui.add_child(
             tui.params,
             |ui: &mut egui::Ui, container: &TaffyContainerUi| background(ui, container, selected),
             |tui, bg_response| {
-                setup_visuals(tui, bg_response);
-
+                setup_tui_visuals(tui, bg_response);
                 f(tui)
             },
         );
@@ -1865,4 +1840,13 @@ stackbox::custom_dyn! {
             self.show(tui, bret)
         }
     }
+}
+
+/// Helper function to set up tui visuals based on background response interaction state
+pub fn setup_tui_visuals(tui: &mut Tui, bg_response: &Response) {
+    let visuals = *tui.egui_ui().style().interact(bg_response);
+    let egui_style = tui.egui_style_mut();
+    egui_style.interaction.selectable_labels = false;
+    egui_style.visuals.widgets.inactive = visuals;
+    egui_style.visuals.widgets.noninteractive = visuals;
 }
