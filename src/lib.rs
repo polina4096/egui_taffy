@@ -337,15 +337,22 @@ impl Tui {
     where
         B: BackgroundDraw,
     {
-        self.add_child_dyn(params, Box::new(background_draw), Box::new(f))
+        let mut background_slot = stackbox::Slot::VACANT;
+        let mut ui_slot = stackbox::Slot::VACANT;
+
+        self.add_child_dyn(
+            params,
+            background_slot.stackbox(background_draw).into_dyn(),
+            ui_slot.stackbox(f).into_dyn(),
+        )
     }
 
     #[allow(clippy::type_complexity)]
-    fn add_child_dyn<'a, 'b, FR, BR>(
+    fn add_child_dyn<FR, BR>(
         &mut self,
         params: TuiBuilderParams,
-        background_draw: Box<dyn BackgroundDraw<ReturnValue = BR> + 'a>,
-        f: Box<dyn FnOnce(&mut Tui, &mut BR) -> FR + 'b>,
+        background_draw: StackBoxDynBackgroundDrawDyn<BR>,
+        f: StackBoxDynFnOnceTuiUi<BR, FR>,
     ) -> TaffyMainBackgroundReturnValues<FR, BR> {
         let TuiBuilderParams {
             id,
@@ -385,7 +392,7 @@ impl Tui {
         self.current_node_index = 0;
         self.current_rect = full_container_max_rect;
 
-        let mut bg = match background_draw.simulate_execution() {
+        let mut bg = match background_draw.simulate_execution_dyn() {
             Some(val) => val,
             None => {
                 let mut ui_builder = egui::UiBuilder::new()
@@ -410,7 +417,7 @@ impl Tui {
                     child_ui.disable();
                 }
 
-                background_draw.draw(&mut child_ui, &self.taffy_container)
+                background_draw.draw_dyn(&mut child_ui, &self.taffy_container)
             }
         };
 
@@ -500,7 +507,7 @@ impl Tui {
                         std::mem::swap(&mut self.current_rect, &mut rect);
                         std::mem::swap(ui, &mut self.ui);
 
-                        let resp = f(self, &mut bg);
+                        let resp = f.show_dyn(self, &mut bg);
 
                         std::mem::swap(ui, &mut self.ui);
                         std::mem::swap(&mut self.current_rect, &mut rect);
@@ -513,7 +520,7 @@ impl Tui {
                 scroll.inner
             } else {
                 std::mem::swap(&mut tmp_ui, &mut self.ui);
-                let resp = f(self, &mut bg);
+                let resp = f.show_dyn(self, &mut bg);
                 std::mem::swap(&mut tmp_ui, &mut self.ui);
                 resp
             }
@@ -1434,8 +1441,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
         fn background(ui: &mut egui::Ui, container: &TaffyContainerUi) -> Response {
             let rect = container.full_container();
-            let response = ui.allocate_rect(rect, egui::Sense::click());
-            response
+            ui.allocate_rect(rect, egui::Sense::click())
         }
 
         fn setup_visuals(tui: &mut Tui, bg_response: &Response) {
@@ -1449,7 +1455,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         let return_values = tui
             .tui
             .add_child(tui.params, background, |tui, bg_response| {
-                setup_visuals(tui, &bg_response);
+                setup_visuals(tui, bg_response);
                 f(tui)
             });
 
@@ -1786,7 +1792,7 @@ trait BackgroundDraw {
     fn simulate_execution(&self) -> Option<Self::ReturnValue>;
 
     /// Implements background drawing functionality
-    fn draw(self: Box<Self>, ui: &mut egui::Ui, container: &TaffyContainerUi) -> Self::ReturnValue;
+    fn draw(self, ui: &mut egui::Ui, container: &TaffyContainerUi) -> Self::ReturnValue;
 }
 
 impl<T, B> BackgroundDraw for T
@@ -1796,7 +1802,7 @@ where
     type ReturnValue = B;
 
     #[inline]
-    fn draw(self: Box<Self>, ui: &mut egui::Ui, container: &TaffyContainerUi) -> Self::ReturnValue {
+    fn draw(self, ui: &mut egui::Ui, container: &TaffyContainerUi) -> Self::ReturnValue {
         self(ui, container)
     }
 
@@ -1810,7 +1816,7 @@ impl BackgroundDraw for () {
     type ReturnValue = ();
 
     #[inline]
-    fn draw(self: Box<Self>, ui: &mut egui::Ui, container: &TaffyContainerUi) -> Self::ReturnValue {
+    fn draw(self, ui: &mut egui::Ui, container: &TaffyContainerUi) -> Self::ReturnValue {
         let _ = container;
         let _ = ui;
     }
@@ -1818,5 +1824,45 @@ impl BackgroundDraw for () {
     #[inline]
     fn simulate_execution(&self) -> Option<Self::ReturnValue> {
         Some(())
+    }
+}
+
+stackbox::custom_dyn! {
+    dyn BackgroundDrawDyn<Ret> : BackgroundDraw<ReturnValue = Ret>
+    {
+        fn draw_dyn(
+            self: Self,
+            ui: &mut egui::Ui,
+            container: &TaffyContainerUi,
+        ) -> Ret {
+            self.draw(ui, container)
+        }
+
+        fn simulate_execution_dyn(self: &Self) -> Option<Ret> {
+            self.simulate_execution()
+        }
+    }
+}
+
+/// Front ui rendering logic
+trait FrontUi<Context, Ret> {
+    fn show(self, tui: &mut Tui, bret: &mut Context) -> Ret;
+}
+
+impl<T, Context, Ret> FrontUi<Context, Ret> for T
+where
+    T: FnOnce(&mut Tui, &mut Context) -> Ret,
+{
+    fn show(self, tui: &mut Tui, bret: &mut Context) -> Ret {
+        self(tui, bret)
+    }
+}
+
+stackbox::custom_dyn! {
+    dyn FnOnceTuiUi<Context, Ret> : FrontUi<Context, Ret>
+    {
+        fn show_dyn(self: Self, tui: &mut Tui, bret: &mut Context) -> Ret {
+            self.show(tui, bret)
+        }
     }
 }

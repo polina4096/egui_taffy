@@ -4,6 +4,7 @@
 
 - Added `tui.clickable` to create clickable region
 - Inner code refactored to use non generic inner functions where possible (Idea taken from rust std).
+- Avoid heap allocations during type erasure using `stackbox` crate.
 
 ## 0.6
 
