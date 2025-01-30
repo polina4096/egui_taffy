@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- Added `tui.clickable` to create clickable region
+- Inner code refactored to use non generic inner functions where possible (Idea taken from rust std).
+
 ## 0.6
 
 This release improves the element background drawing API and exposes the internal Taffy state, allowing for the implementation of additional functionalities such as virtual grids and table backgrounds.

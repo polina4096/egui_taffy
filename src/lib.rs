@@ -1429,6 +1429,38 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
         return_values.main
     }
 
+    /// Add tui node with background that acts egui Collapsing header
+    #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
+    fn clickable<T>(self, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
+        let tui = self.tui();
+
+        fn background(ui: &mut egui::Ui, container: &TaffyContainerUi) -> Response {
+            let rect = container.full_container();
+            let response = ui.allocate_rect(rect, egui::Sense::click());
+            response
+        }
+
+        fn setup_visuals(tui: &mut Tui, bg_response: &Response) {
+            let visuals = *tui.egui_ui().style().interact(bg_response);
+            let egui_style = tui.egui_style_mut();
+            egui_style.interaction.selectable_labels = false;
+            egui_style.visuals.widgets.inactive = visuals;
+            egui_style.visuals.widgets.noninteractive = visuals;
+        }
+
+        let return_values = tui
+            .tui
+            .add_child(tui.params, background, |tui, bg_response| {
+                setup_visuals(tui, &bg_response);
+                f(tui)
+            });
+
+        TuiInnerResponse {
+            inner: return_values.main,
+            response: return_values.background,
+        }
+    }
+
     /// Add tui node with background that acts as egui button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
     fn filled_button<T>(
@@ -1438,30 +1470,42 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     ) -> TuiInnerResponse<T> {
         let tui = self.with_border_style_from_egui_style();
 
+        fn background(
+            ui: &mut egui::Ui,
+            container: &TaffyContainerUi,
+            target_tint_color: Option<egui::Color32>,
+        ) -> Response {
+            let rect = container.full_container();
+            let response = ui.allocate_rect(rect, egui::Sense::click());
+            let visuals = ui.style().interact(&response);
+
+            let painter = ui.painter();
+            let stroke = visuals.bg_stroke;
+
+            let mut bg_fill = visuals.weak_bg_fill;
+            if let Some(fill) = target_tint_color {
+                bg_fill = egui::ecolor::tint_color_towards(bg_fill, fill);
+            }
+            painter.rect(rect.shrink(stroke.width), visuals.rounding, bg_fill, stroke);
+
+            response
+        }
+
+        fn setup_visuals(tui: &mut Tui, bg_response: &Response) {
+            let visuals = *tui.egui_ui().style().interact(bg_response);
+            let egui_style = tui.egui_style_mut();
+            egui_style.interaction.selectable_labels = false;
+            egui_style.visuals.widgets.inactive = visuals;
+            egui_style.visuals.widgets.noninteractive = visuals;
+        }
+
         let return_values = tui.tui.add_child(
             tui.params,
             |ui: &mut egui::Ui, container: &TaffyContainerUi| {
-                let rect = container.full_container();
-                let response = ui.allocate_rect(rect, egui::Sense::click());
-                let visuals = ui.style().interact(&response);
-
-                let painter = ui.painter();
-                let stroke = visuals.bg_stroke;
-
-                let mut bg_fill = visuals.weak_bg_fill;
-                if let Some(fill) = target_tint_color {
-                    bg_fill = egui::ecolor::tint_color_towards(bg_fill, fill);
-                }
-                painter.rect(rect.shrink(stroke.width), visuals.rounding, bg_fill, stroke);
-
-                response
+                background(ui, container, target_tint_color)
             },
             |tui, bg_response| {
-                let visuals = *tui.egui_ui().style().interact(bg_response);
-                let egui_style = tui.egui_style_mut();
-                egui_style.interaction.selectable_labels = false;
-                egui_style.visuals.widgets.inactive = visuals;
-                egui_style.visuals.widgets.noninteractive = visuals;
+                setup_visuals(tui, bg_response);
 
                 f(tui)
             },
@@ -1484,36 +1528,42 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     fn selectable<T>(self, selected: bool, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
         let tui = self.with_border_style_from_egui_style();
 
+        fn background(ui: &mut egui::Ui, container: &TaffyContainerUi, selected: bool) -> Response {
+            let rect = container.full_container();
+            let response = ui.allocate_rect(rect, egui::Sense::click());
+
+            let mut visuals = ui.style().interact_selectable(&response, selected);
+
+            if response.hovered() && selected {
+                // Add visual effect even if button is selected
+                visuals.weak_bg_fill = ui.style().visuals.gray_out(visuals.weak_bg_fill);
+            }
+
+            let painter = ui.painter();
+            let stroke = visuals.bg_stroke;
+            painter.rect(
+                rect.shrink(stroke.width),
+                visuals.rounding,
+                visuals.weak_bg_fill,
+                stroke,
+            );
+
+            response
+        }
+
+        fn setup_visuals(tui: &mut Tui, bg_response: &Response) {
+            let visuals = *tui.egui_ui().style().interact(bg_response);
+            let egui_style = tui.egui_style_mut();
+            egui_style.interaction.selectable_labels = false;
+            egui_style.visuals.widgets.inactive = visuals;
+            egui_style.visuals.widgets.noninteractive = visuals;
+        }
+
         let return_values = tui.tui.add_child(
             tui.params,
-            |ui: &mut egui::Ui, container: &TaffyContainerUi| {
-                let rect = container.full_container();
-                let response = ui.allocate_rect(rect, egui::Sense::click());
-
-                let mut visuals = ui.style().interact_selectable(&response, selected);
-
-                if response.hovered() && selected {
-                    // Add visual effect even if button is selected
-                    visuals.weak_bg_fill = ui.style().visuals.gray_out(visuals.weak_bg_fill);
-                }
-
-                let painter = ui.painter();
-                let stroke = visuals.bg_stroke;
-                painter.rect(
-                    rect.shrink(stroke.width),
-                    visuals.rounding,
-                    visuals.weak_bg_fill,
-                    stroke,
-                );
-
-                response
-            },
+            |ui: &mut egui::Ui, container: &TaffyContainerUi| background(ui, container, selected),
             |tui, bg_response| {
-                let visuals = *tui.egui_ui().style().interact(bg_response);
-                let egui_style = tui.egui_style_mut();
-                egui_style.interaction.selectable_labels = false;
-                egui_style.visuals.widgets.inactive = visuals;
-                egui_style.visuals.widgets.noninteractive = visuals;
+                setup_visuals(tui, bg_response);
 
                 f(tui)
             },
