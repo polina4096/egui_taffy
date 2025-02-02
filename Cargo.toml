@@ -20,6 +20,8 @@ taffy = { version = "0.7.3", default-features = false, features = [
   "taffy_tree",
   "detailed_layout_info",
 ] }
+parking_lot = { version = "0.12", features = ["arc_lock"] }
+tracing = { version = "0.1", optional = true }
 
 [features]
 default = ["taffy_default"]
@@ -31,6 +33,7 @@ taffy_default = [
   "taffy/grid",
   "taffy/std",
 ]
+tracing = ["dep:tracing"]
 
 [dev-dependencies]
 eframe = { version = "0.30", default-features = false, features = [

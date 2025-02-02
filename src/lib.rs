@@ -3,11 +3,12 @@
 #![doc = include_str!("../README.md")]
 
 use std::collections::{HashMap, HashSet};
-use std::ops::Deref;
-use std::sync::{Arc, Mutex};
+use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 use egui::util::IdTypeMap;
 use egui::{Pos2, Response, Ui, UiBuilder};
+use parking_lot::{ArcMutexGuard, RawMutex};
 use taffy::prelude::*;
 use widgets::TaffySeparator;
 
@@ -170,37 +171,17 @@ pub struct Tui {
     /// Temporary default limit on scroll area size due to taffy
     /// being unable to shrink container to be smaller than content automatically
     limit_scroll_area_size: Option<f32>,
+
+    state: ArcMutexGuard<RawMutex, TaffyState>,
 }
 
 impl Tui {
-    /// Retrieve stored layout information in egui memory
-    fn with_tui_state<T>(
-        id: egui::Id,
-        ctx: &egui::Context,
-        f: impl FnOnce(&mut TaffyState) -> T,
-    ) -> T {
-        let state = ctx.data_mut(|data: &mut IdTypeMap| {
-            let state: Arc<Mutex<TaffyState>> = data
-                .get_temp_mut_or_insert_with(id, || Arc::new(Mutex::new(TaffyState::new())))
-                .clone();
-            state
-        });
-
-        let mut state = state.lock().unwrap();
-
-        f(&mut state)
-    }
-
-    /// Retrieve internal taffy state
-    ///
-    /// Function takes mutable reference to avoid unintended locking when accessing
-    /// egui Memory.
-    pub fn with_state<T>(&mut self, f: impl FnOnce(&mut TaffyState) -> T) -> T {
-        Self::with_tui_state(self.main_id, self.ui.ctx(), f)
-    }
-
     /// Manually create Tui, user must manually allocate space in egui Ui if this method is used
     /// directly instead of helper method [`tui`]
+    #[cfg_attr(
+        feature = "tracing",
+        tracing::instrument(level = "trace", skip(ui, root_rect, available_space, style, f))
+    )]
     pub fn create<T>(
         ui: &mut Ui,
         id: egui::Id,
@@ -210,6 +191,19 @@ impl Tui {
         f: impl FnOnce(&mut Tui) -> T,
     ) -> TaffyReturn<T> {
         let ui = ui.new_child(UiBuilder::new());
+
+        // Create stored state
+        let state = ui.data_mut(|data: &mut IdTypeMap| {
+            let state: Arc<parking_lot::Mutex<TaffyState>> = data
+                .get_temp_mut_or_insert_with(id, || {
+                    Arc::new(parking_lot::Mutex::new(TaffyState::new()))
+                })
+                .clone();
+            state
+        });
+        let state = state
+            .try_lock_arc()
+            .expect("Each egui_taffy instance should have unique id");
 
         let mut this = Self {
             main_id: id,
@@ -226,6 +220,7 @@ impl Tui {
             current_id: id,
             limit_scroll_area_size: None,
             last_scroll_offset: egui::Vec2::ZERO,
+            state,
         };
 
         this.tui().id(id).style(style).add(|state| {
@@ -259,72 +254,77 @@ impl Tui {
             log::error!("Taffy layout id collision!");
         }
 
-        Self::with_tui_state(self.main_id, self.ui.ctx(), |state| {
-            let child_idx = self.current_node_index;
-            self.current_node_index += 1;
+        let child_idx = self.current_node_index;
+        self.current_node_index += 1;
 
-            self.used_items.insert(id);
-            let mut first_frame = false;
+        self.used_items.insert(id);
+        let mut first_frame = false;
 
-            let node_id = if let Some(node_id) = state.id_to_node_id.get(&id).copied() {
-                if state.taffy_tree.style(node_id).unwrap() != &style {
-                    state.taffy_tree.set_style(node_id, style).unwrap();
-                }
-                node_id
-            } else {
-                first_frame = true;
-                let node = state.taffy_tree.new_leaf(style).unwrap();
-                state.id_to_node_id.insert(id, node);
-                node
-            };
-
-            if let Some(current_node) = self.current_node {
-                if child_idx < state.taffy_tree.child_count(current_node) {
-                    // Check if child at position matches
-                    if state
-                        .taffy_tree
-                        .child_at_index(current_node, child_idx)
-                        .unwrap()
-                        != node_id
-                    {
-                        // Remove element if it was attached to some node previously
-                        let parent = state.taffy_tree.parent(node_id);
-                        if let Some(parent) = parent {
-                            state.taffy_tree.remove_child(parent, node_id).unwrap();
-                        }
-
-                        // Layout has changed, remove all following children
-                        //
-                        // Because node one by one removal is slow if items have changed their location.
-                        // Faster is to remove whole tail.
-                        let mut count = state.taffy_tree.child_count(current_node);
-                        while child_idx < count {
-                            count -= 1;
-                            state
-                                .taffy_tree
-                                .remove_child_at_index(current_node, count)
-                                .unwrap();
-                        }
-
-                        // Add element to the end
-                        state.taffy_tree.add_child(current_node, node_id).unwrap();
-                    }
-                } else {
-                    // Add element to the end
-                    state.taffy_tree.add_child(current_node, node_id).unwrap();
-                }
+        let node_id = if let Some(node_id) = self.state.id_to_node_id.get(&id).copied() {
+            if self.state.taffy_tree.style(node_id).unwrap() != &style {
+                self.state.taffy_tree.set_style(node_id, style).unwrap();
             }
+            node_id
+        } else {
+            first_frame = true;
+            let node = self.state.taffy_tree.new_leaf(style).unwrap();
+            self.state.id_to_node_id.insert(id, node);
+            node
+        };
 
-            let container = TaffyContainerUi {
-                layout: state.layout(node_id),
-                parent_rect: self.current_rect,
-                first_frame,
-                sticky,
-                last_scroll_offset: self.last_scroll_offset,
-            };
+        if let Some(current_node) = self.current_node {
+            if child_idx < self.state.taffy_tree.child_count(current_node) {
+                // Check if child at position matches
+                if self
+                    .state
+                    .taffy_tree
+                    .child_at_index(current_node, child_idx)
+                    .unwrap()
+                    != node_id
+                {
+                    // Remove element if it was attached to some node previously
+                    let parent = self.state.taffy_tree.parent(node_id);
+                    if let Some(parent) = parent {
+                        self.state.taffy_tree.remove_child(parent, node_id).unwrap();
+                    }
 
-            (node_id, container)
-        })
+                    // Layout has changed, remove all following children
+                    //
+                    // Because node one by one removal is slow if items have changed their location.
+                    // Faster is to remove whole tail.
+                    let mut count = self.state.taffy_tree.child_count(current_node);
+                    while child_idx < count {
+                        count -= 1;
+                        self.state
+                            .taffy_tree
+                            .remove_child_at_index(current_node, count)
+                            .unwrap();
+                    }
+
+                    // Add element to the end
+                    self.state
+                        .taffy_tree
+                        .add_child(current_node, node_id)
+                        .unwrap();
+                }
+            } else {
+                // Add element to the end
+                self.state
+                    .taffy_tree
+                    .add_child(current_node, node_id)
+                    .unwrap();
+            }
+        }
+
+        let container = TaffyContainerUi {
+            layout: self.state.layout(node_id),
+            parent_rect: self.current_rect,
+            first_frame,
+            sticky,
+            last_scroll_offset: self.last_scroll_offset,
+        };
+
+        (node_id, container)
     }
 
     /// Add child taffy node to the layout with optional function to draw background
@@ -526,17 +526,15 @@ impl Tui {
             }
         };
 
-        Self::with_tui_state(self.main_id, self.ui.ctx(), |state| {
-            let mut current_cnt = state.taffy_tree.child_count(node_id);
+        let mut current_cnt = self.state.taffy_tree.child_count(node_id);
 
-            while current_cnt > self.current_node_index {
-                current_cnt -= 1;
-                state
-                    .taffy_tree
-                    .remove_child_at_index(node_id, current_cnt)
-                    .unwrap();
-            }
-        });
+        while current_cnt > self.current_node_index {
+            current_cnt -= 1;
+            self.state
+                .taffy_tree
+                .remove_child_at_index(node_id, current_cnt)
+                .unwrap();
+        }
 
         self.current_id = stored_id;
         self.current_node = stored_node;
@@ -570,28 +568,26 @@ impl Tui {
 
             let nodeid = tui.current_node.unwrap();
 
-            Self::with_tui_state(tui.main_id, tui.ui.ctx(), |state| {
-                let min_size = if let Some(intrinsic_size) = resp.intrinsic_size {
-                    resp.min_size.min(intrinsic_size).ceil()
-                } else {
-                    resp.min_size.ceil()
-                };
+            let min_size = if let Some(intrinsic_size) = resp.intrinsic_size {
+                resp.min_size.min(intrinsic_size).ceil()
+            } else {
+                resp.min_size.ceil()
+            };
 
-                let mut max_size = resp.max_size;
-                max_size = max_size.max(min_size);
+            let mut max_size = resp.max_size;
+            max_size = max_size.max(min_size);
 
-                let new_content = Context {
-                    min_size,
-                    max_size,
-                    infinite: resp.infinite,
-                };
-                if state.taffy_tree.get_node_context(nodeid) != Some(&new_content) {
-                    state
-                        .taffy_tree
-                        .set_node_context(nodeid, Some(new_content))
-                        .unwrap();
-                }
-            });
+            let new_content = Context {
+                min_size,
+                max_size,
+                infinite: resp.infinite,
+            };
+            if tui.state.taffy_tree.get_node_context(nodeid) != Some(&new_content) {
+                tui.state
+                    .taffy_tree
+                    .set_node_context(nodeid, Some(new_content))
+                    .unwrap();
+            }
 
             resp.inner
         });
@@ -623,9 +619,11 @@ impl Tui {
         }
 
         self.tui().params(params).add(|tui| {
-            let layout = Self::with_tui_state(tui.main_id, tui.ui.ctx(), |state| {
-                *state.taffy_tree.layout(tui.current_node.unwrap()).unwrap()
-            });
+            let layout = *tui
+                .state
+                .taffy_tree
+                .layout(tui.current_node.unwrap())
+                .unwrap();
 
             tui.add_container(
                 TuiBuilderParams {
@@ -677,6 +675,7 @@ impl Tui {
 
     /// Check if tui layout has changed, recalculate if necessary and trigger
     /// request discard for egui to redraw the UI
+    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip_all))]
     fn recalculate(&mut self) -> TaffyContainerUi {
         let root_rect = self.root_rect;
         let available_space = self.available_space.unwrap_or(Size {
@@ -685,113 +684,113 @@ impl Tui {
         });
 
         let current_node = self.current_node.unwrap();
-        Self::with_tui_state(self.main_id, self.ui.ctx(), |state| {
-            // Remove unused nodes (Removes unused child nodes too )
-            state.id_to_node_id.retain(|k, v| {
-                if self.used_items.contains(k) {
-                    return true;
-                }
-                if let Some(parent) = state.taffy_tree.parent(*v) {
-                    state.taffy_tree.remove_child(parent, *v).unwrap();
-                }
-                state.taffy_tree.remove(*v).unwrap();
-                false
-            });
-            self.used_items.clear();
 
-            let taffy = &mut state.taffy_tree;
-
-            if taffy.dirty(current_node).unwrap() || state.last_size != root_rect.size() {
-                // let ctx = self.ui.ctx();
-
-                state.last_size = root_rect.size();
-                taffy
-                    .compute_layout_with_measure(
-                        current_node,
-                        available_space,
-                        |_known_size: Size<Option<f32>>,
-                         available_space: Size<AvailableSpace>,
-                         _id,
-                         context,
-                         _style|
-                         -> Size<f32> {
-                            let context = context.copied().unwrap_or(Context {
-                                min_size: egui::Vec2::ZERO,
-                                max_size: egui::Vec2::ZERO,
-                                infinite: egui::Vec2b::FALSE,
-                            });
-
-                            let Context {
-                                mut min_size,
-                                mut max_size,
-                                infinite,
-                            } = context;
-
-                            // if scroll_area {
-                            //     min_size = egui::Vec2::ZERO;
-                            // }
-
-                            if min_size.any_nan() {
-                                min_size = egui::Vec2::ZERO;
-                            }
-                            if max_size.any_nan() {
-                                max_size = root_rect.size();
-                            }
-
-                            let max_size = egui::Vec2 {
-                                x: if infinite.x {
-                                    root_rect.width()
-                                } else {
-                                    max_size.x
-                                },
-                                y: if infinite.y {
-                                    root_rect.height()
-                                } else {
-                                    max_size.y
-                                },
-                            };
-
-                            let width = match available_space.width {
-                                AvailableSpace::Definite(num) => {
-                                    num.clamp(min_size.x, max_size.x.max(min_size.x))
-                                }
-                                AvailableSpace::MinContent => min_size.x,
-                                AvailableSpace::MaxContent => max_size.x,
-                            };
-                            let height = match available_space.height {
-                                AvailableSpace::Definite(num) => {
-                                    num.clamp(min_size.y, max_size.y.max(min_size.y))
-                                }
-                                AvailableSpace::MinContent => min_size.y,
-                                AvailableSpace::MaxContent => max_size.y,
-                            };
-
-                            #[allow(clippy::let_and_return)]
-                            let final_size = Size { width, height };
-
-                            // println!(
-                            //     "{:?} {:?} {:?} {:?} {:?} {:?}",
-                            //     _id, min_size, max_size, available_space, final_size, _known_size,
-                            // );
-
-                            final_size
-                        },
-                    )
-                    .unwrap();
-                // taffy.print_tree(current_node);
-
-                log::trace!("Taffy recalculation done!");
-                self.ui.ctx().request_discard("Taffy recalculation");
+        // Remove unused nodes (Removes unused child nodes too )
+        let state = self.state.deref_mut();
+        state.id_to_node_id.retain(|k, v| {
+            if self.used_items.contains(k) {
+                return true;
             }
-
-            TaffyContainerUi {
-                parent_rect: root_rect,
-                layout: state.layout(current_node),
-                first_frame: false,
-                sticky: egui::Vec2b::FALSE,
-                last_scroll_offset: egui::Vec2::ZERO,
+            if let Some(parent) = state.taffy_tree.parent(*v) {
+                state.taffy_tree.remove_child(parent, *v).unwrap();
             }
-        })
+            state.taffy_tree.remove(*v).unwrap();
+            false
+        });
+        self.used_items.clear();
+
+        let taffy = &mut state.taffy_tree;
+
+        if taffy.dirty(current_node).unwrap() || state.last_size != root_rect.size() {
+            // let ctx = self.ui.ctx();
+
+            state.last_size = root_rect.size();
+            taffy
+                .compute_layout_with_measure(
+                    current_node,
+                    available_space,
+                    |_known_size: Size<Option<f32>>,
+                     available_space: Size<AvailableSpace>,
+                     _id,
+                     context,
+                     _style|
+                     -> Size<f32> {
+                        let context = context.copied().unwrap_or(Context {
+                            min_size: egui::Vec2::ZERO,
+                            max_size: egui::Vec2::ZERO,
+                            infinite: egui::Vec2b::FALSE,
+                        });
+
+                        let Context {
+                            mut min_size,
+                            mut max_size,
+                            infinite,
+                        } = context;
+
+                        // if scroll_area {
+                        //     min_size = egui::Vec2::ZERO;
+                        // }
+
+                        if min_size.any_nan() {
+                            min_size = egui::Vec2::ZERO;
+                        }
+                        if max_size.any_nan() {
+                            max_size = root_rect.size();
+                        }
+
+                        let max_size = egui::Vec2 {
+                            x: if infinite.x {
+                                root_rect.width()
+                            } else {
+                                max_size.x
+                            },
+                            y: if infinite.y {
+                                root_rect.height()
+                            } else {
+                                max_size.y
+                            },
+                        };
+
+                        let width = match available_space.width {
+                            AvailableSpace::Definite(num) => {
+                                num.clamp(min_size.x, max_size.x.max(min_size.x))
+                            }
+                            AvailableSpace::MinContent => min_size.x,
+                            AvailableSpace::MaxContent => max_size.x,
+                        };
+                        let height = match available_space.height {
+                            AvailableSpace::Definite(num) => {
+                                num.clamp(min_size.y, max_size.y.max(min_size.y))
+                            }
+                            AvailableSpace::MinContent => min_size.y,
+                            AvailableSpace::MaxContent => max_size.y,
+                        };
+
+                        #[allow(clippy::let_and_return)]
+                        let final_size = Size { width, height };
+
+                        // println!(
+                        //     "{:?} {:?} {:?} {:?} {:?} {:?}",
+                        //     _id, min_size, max_size, available_space, final_size, _known_size,
+                        // );
+
+                        final_size
+                    },
+                )
+                .unwrap();
+            // taffy.print_tree(current_node);
+
+            log::trace!("Taffy recalculation done!");
+            self.ui.ctx().request_discard("Taffy recalculation");
+        }
+
+        TaffyContainerUi {
+            parent_rect: root_rect,
+            layout: self.state.layout(current_node),
+            first_frame: false,
+            sticky: egui::Vec2b::FALSE,
+            last_scroll_offset: egui::Vec2::ZERO,
+        }
     }
 
     /// Access underlaying egui ui
@@ -837,12 +836,11 @@ impl Tui {
     ///
     /// Useful when need to create child nodes with the same style
     pub fn current_style(&self) -> taffy::Style {
-        Self::with_tui_state(self.main_id, self.ui.ctx(), |data| {
-            data.taffy_tree
-                .style(self.current_node.unwrap())
-                .unwrap()
-                .clone()
-        })
+        self.state
+            .taffy_tree
+            .style(self.current_node.unwrap())
+            .unwrap()
+            .clone()
     }
 
     /// Current Tui UI id
@@ -869,6 +867,16 @@ impl Tui {
     /// Retrieve layout information of current Tui node
     pub fn taffy_container(&self) -> &TaffyContainerUi {
         &self.taffy_container
+    }
+
+    /// Retrieve inner state of taffy layout
+    fn with_state<T>(&self, f: impl FnOnce(&TaffyState) -> T) -> T {
+        f(&self.state)
+    }
+
+    /// Retrieve taffy id that was used to identify this egui_taffy instance in egui data
+    pub fn main_taffy_id(&self) -> egui::Id {
+        self.main_id
     }
 }
 
