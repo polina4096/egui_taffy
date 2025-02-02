@@ -801,6 +801,12 @@ impl Tui {
 
     /// Access underlaying egui ui
     #[inline]
+    pub fn egui_ctx(&self) -> &egui::Context {
+        self.ui.ctx()
+    }
+
+    /// Access underlaying egui ui
+    #[inline]
     pub fn egui_ui_mut(&mut self) -> &mut egui::Ui {
         &mut self.ui
     }
