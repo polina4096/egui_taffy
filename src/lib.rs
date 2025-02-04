@@ -328,6 +328,7 @@ impl Tui {
     }
 
     /// Add child taffy node to the layout with optional function to draw background
+    #[inline]
     fn add_child<FR, B>(
         &mut self,
         params: TuiBuilderParams,
@@ -548,11 +549,21 @@ impl Tui {
         }
     }
 
-    /// Add egui user interface as child node in the Tui
+    #[inline]
     fn add_container<T>(
         &mut self,
         params: TuiBuilderParams,
         content: impl FnOnce(&mut Ui, &TaffyContainerUi) -> TuiContainerResponse<T>,
+    ) -> T {
+        let mut ui_slot = stackbox::Slot::VACANT;
+        self.add_container_dyn(params, ui_slot.stackbox(content).into_dyn())
+    }
+
+    /// Add egui user interface as child node in the Tui
+    fn add_container_dyn<T>(
+        &mut self,
+        params: TuiBuilderParams,
+        content: StackBoxDynFnOnceEguiUiContainer<T>,
     ) -> T {
         let fg_bg = self.add_child(params, (), |tui, _| {
             let taffy_container = tui.taffy_container().clone();
@@ -564,7 +575,7 @@ impl Tui {
             }
             let mut child_ui = tui.ui.new_child(ui_builder);
 
-            let resp = content(&mut child_ui, &taffy_container);
+            let resp = content.show_dyn(&mut child_ui, &taffy_container);
 
             let nodeid = tui.current_node.unwrap();
 
@@ -834,6 +845,7 @@ impl Tui {
     /// Initial root rect size set by the user
     ///
     /// (Used size in reality could change based on available space settings )
+    #[inline]
     pub fn root_rect(&self) -> egui::Rect {
         self.root_rect
     }
@@ -841,6 +853,7 @@ impl Tui {
     /// Retrieve and clone current taffy style
     ///
     /// Useful when need to create child nodes with the same style
+    #[inline]
     pub fn current_style(&self) -> taffy::Style {
         self.state
             .taffy_tree
@@ -850,37 +863,44 @@ impl Tui {
     }
 
     /// Current Tui UI id
+    #[inline]
     pub fn current_id(&self) -> egui::Id {
         self.current_id
     }
 
     /// Last viewport rect (Full tui layout or last scrollable element)
+    #[inline]
     pub fn current_viewport(&self) -> egui::Rect {
         self.current_viewport
     }
 
     /// Current viewport content rect (Full tui layout or last scrollable element content rect)
+    #[inline]
     pub fn current_viewport_content(&self) -> egui::Rect {
         self.current_viewport_content
     }
 
     /// Retrieve current Tui node [`NodeId`]
+    #[inline]
     pub fn current_node(&self) -> NodeId {
         // Public function is only called when current_node is initialised
         self.current_node.unwrap()
     }
 
     /// Retrieve layout information of current Tui node
+    #[inline]
     pub fn taffy_container(&self) -> &TaffyContainerUi {
         &self.taffy_container
     }
 
     /// Retrieve inner state of taffy layout
+    #[inline]
     fn with_state<T>(&self, f: impl FnOnce(&TaffyState) -> T) -> T {
         f(&self.state)
     }
 
     /// Retrieve taffy id that was used to identify this egui_taffy instance in egui data
+    #[inline]
     pub fn main_taffy_id(&self) -> egui::Id {
         self.main_id
     }
@@ -928,6 +948,7 @@ impl Default for TaffyContainerUi {
     }
 }
 
+#[inline]
 fn sum_axis(rect: &taffy::Rect<f32>) -> taffy::Size<f32> {
     taffy::Size {
         width: rect.left + rect.right,
@@ -935,6 +956,7 @@ fn sum_axis(rect: &taffy::Rect<f32>) -> taffy::Size<f32> {
     }
 }
 
+#[inline]
 fn top_left(rect: &taffy::Rect<f32>) -> taffy::Point<f32> {
     taffy::Point {
         x: rect.left,
@@ -944,16 +966,19 @@ fn top_left(rect: &taffy::Rect<f32>) -> taffy::Point<f32> {
 
 impl TaffyContainerUi {
     /// Sticky element compensation amount based on last scrollable ancestor scroll offset
+    #[inline]
     pub fn sticky_offset(&self) -> egui::Vec2 {
         self.sticky.to_vec2() * self.last_scroll_offset
     }
 
     /// Full container size
+    #[inline]
     pub fn full_container(&self) -> egui::Rect {
         self.full_container_with(true)
     }
 
     /// Full container size
+    #[inline]
     pub fn full_container_with(&self, scroll_offset: bool) -> egui::Rect {
         let layout = &self.layout;
         let rect = egui::Rect::from_min_size(
@@ -968,6 +993,7 @@ impl TaffyContainerUi {
     }
 
     /// Full container rect without border
+    #[inline]
     pub fn full_container_without_border(&self) -> egui::Rect {
         let layout = &self.layout;
 
@@ -982,6 +1008,7 @@ impl TaffyContainerUi {
     }
 
     /// Full container rect without border and padding
+    #[inline]
     pub fn full_container_without_border_and_padding(&self) -> egui::Rect {
         let layout = &self.layout;
 
@@ -996,21 +1023,25 @@ impl TaffyContainerUi {
     }
 
     /// Calculated taffy::Layout for this node
+    #[inline]
     pub fn layout(&self) -> &Layout {
         &self.layout
     }
 
     /// Is this the first frame.
+    #[inline]
     pub fn first_frame(&self) -> bool {
         self.first_frame
     }
 
     /// Parent rect that is used to calculate rect of this node
+    #[inline]
     pub fn parent_rect(&self) -> egui::Rect {
         self.parent_rect
     }
 
     /// Is element position sticky in specified dimensions
+    #[inline]
     pub fn sticky(&self) -> egui::Vec2b {
         self.sticky
     }
@@ -1355,6 +1386,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     }
 
     /// Add tui node as children to this node
+    #[inline]
     fn add<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui();
         tui.tui.add_child(tui.params, (), |tui, _| f(tui)).main
@@ -1363,11 +1395,13 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add empty tui node as children to this node
     ///
     /// Useful to fill grid cells with empty content
+    #[inline]
     fn add_empty(self) {
         self.tui().add(|_| {})
     }
 
     /// Add tui node as children to this node and draw only background color
+    #[inline]
     fn add_with_background_color<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui();
 
@@ -1390,6 +1424,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     }
 
     /// Add tui node as children to this node and draw popup background
+    #[inline]
     fn add_with_background<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         let tui = self.tui().with_border_style_from_egui_style();
 
@@ -1431,6 +1466,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     }
 
     /// Add tui node as children to this node and draw simple group Frame background
+    #[inline]
     fn add_with_border<T>(self, f: impl FnOnce(&mut Tui) -> T) -> T {
         fn background(ui: &mut egui::Ui, container: &TaffyContainerUi) {
             let visuals = ui.style().noninteractive();
@@ -1473,6 +1509,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
     /// Add tui node with background that acts as egui button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
+    #[inline]
     fn filled_button<T>(
         self,
         target_tint_color: Option<egui::Color32>,
@@ -1521,12 +1558,14 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
     /// Add tui node with background that acts as egui button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
+    #[inline]
     fn button<T>(self, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
         self.filled_button(None, f)
     }
 
     /// Add tui node with background that acts as selectable button
     #[must_use = "You should check if the user clicked this with `if ….clicked() { … } "]
+    #[inline]
     fn selectable<T>(self, selected: bool, f: impl FnOnce(&mut Tui) -> T) -> TuiInnerResponse<T> {
         let tui = self.with_border_style_from_egui_style();
 
@@ -1571,6 +1610,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add tui node as children to this node and draw custom background
     ///
     /// See [`TuiBuilderLogic::add_with_background`] for example
+    #[inline]
     fn add_with_background_ui<FR, BR>(
         self,
         content: impl FnOnce(&mut egui::Ui, &TaffyContainerUi) -> BR,
@@ -1635,6 +1675,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     }
 
     /// Add finite egui ui as tui leaf node
+    #[inline]
     fn ui_finite<T>(self, content: impl FnOnce(&mut Ui) -> T) -> T {
         self.ui_manual(|ui, _params| {
             let inner = content(ui);
@@ -1649,6 +1690,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     }
 
     /// Add egui ui that can grow infinitely as tui leaf node
+    #[inline]
     fn ui_infinite<T>(self, content: impl FnOnce(&mut Ui) -> T) -> T {
         self.ui_manual(|ui, _params| {
             let inner = content(ui);
@@ -1666,6 +1708,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// node for layout calculation
     ///
     /// Useful when implementing [`TuiWidget`] trait
+    #[inline]
     fn ui_manual<T>(
         self,
         content: impl FnOnce(&mut Ui, &TaffyContainerUi) -> TuiContainerResponse<T>,
@@ -1683,6 +1726,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Add egui widget as leaf node and modify calculated used space information
     ///
     /// Useful when implementing [`TuiWidget`] trait
+    #[inline]
     fn ui_add_manual(
         self,
         f: impl FnOnce(&mut egui::Ui) -> Response,
@@ -1842,6 +1886,7 @@ impl<T, Context, Ret> FrontUi<Context, Ret> for T
 where
     T: FnOnce(&mut Tui, &mut Context) -> Ret,
 {
+    #[inline]
     fn show(self, tui: &mut Tui, bret: &mut Context) -> Ret {
         self(tui, bret)
     }
@@ -1852,6 +1897,30 @@ stackbox::custom_dyn! {
     {
         fn show_dyn(self: Self, tui: &mut Tui, bret: &mut Context) -> Ret {
             self.show(tui, bret)
+        }
+    }
+}
+
+/// Egui node display trait
+trait EguiUiContainer<Ret> {
+    fn show(self, ui: &mut Ui, container: &TaffyContainerUi) -> TuiContainerResponse<Ret>;
+}
+
+impl<T, Ret> EguiUiContainer<Ret> for T
+where
+    T: FnOnce(&mut egui::Ui, &TaffyContainerUi) -> TuiContainerResponse<Ret>,
+{
+    #[inline]
+    fn show(self, ui: &mut egui::Ui, container: &TaffyContainerUi) -> TuiContainerResponse<Ret> {
+        self(ui, container)
+    }
+}
+
+stackbox::custom_dyn! {
+    dyn FnOnceEguiUiContainer<Ret> : EguiUiContainer<Ret>
+    {
+        fn show_dyn(self: Self, ui: &mut egui::Ui, container: &TaffyContainerUi) -> TuiContainerResponse<Ret> {
+            self.show(ui, container)
         }
     }
 }

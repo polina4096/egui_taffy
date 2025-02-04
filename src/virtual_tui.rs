@@ -56,6 +56,7 @@ impl VirtualGridRowHelper {
     ///
     /// Closure receives information about grid row that needs to be drawn.
     /// All virtual rows should have equal heaight. One row will be used to estimate height of all rows.
+    #[cfg_attr(feature = "tracing", tracing::instrument(level = "trace", skip_all))]
     pub fn show<F>(params: VirtualGridRowHelperParams, tui: &mut Tui, mut draw_line: F)
     where
         F: FnMut(&mut Tui, VirtualGridRow),
