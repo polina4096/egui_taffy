@@ -250,14 +250,13 @@ impl Tui {
         style: taffy::Style,
         sticky: egui::Vec2b,
     ) -> (NodeId, TaffyContainerUi) {
-        if self.used_items.contains(&id) {
+        if !self.used_items.insert(id) {
             log::error!("Taffy layout id collision!");
         }
 
         let child_idx = self.current_node_index;
         self.current_node_index += 1;
 
-        self.used_items.insert(id);
         let mut first_frame = false;
 
         let node_id = if let Some(node_id) = self.state.id_to_node_id.get(&id).copied() {
@@ -317,7 +316,7 @@ impl Tui {
         }
 
         let container = TaffyContainerUi {
-            layout: self.state.layout(node_id),
+            layout: self.state.layout(node_id).clone(),
             parent_rect: self.current_rect,
             first_frame,
             sticky,
@@ -348,7 +347,6 @@ impl Tui {
         )
     }
 
-    #[allow(clippy::type_complexity)]
     fn add_child_dyn<FR, BR>(
         &mut self,
         params: TuiBuilderParams,
@@ -797,7 +795,7 @@ impl Tui {
 
         TaffyContainerUi {
             parent_rect: root_rect,
-            layout: self.state.layout(current_node),
+            layout: self.state.layout(current_node).clone(),
             first_frame: false,
             sticky: egui::Vec2b::FALSE,
             last_scroll_offset: egui::Vec2::ZERO,
@@ -1167,16 +1165,19 @@ impl TaffyState {
         }
     }
 
-    fn layout(&self, node_id: NodeId) -> Layout {
-        *self.taffy_tree.layout(node_id).unwrap()
+    #[inline]
+    fn layout(&self, node_id: NodeId) -> &Layout {
+        self.taffy_tree.layout(node_id).unwrap()
     }
 
     /// Retrieve underlaying [`TaffyTree`] that stores calculated layout information
+    #[inline]
     pub fn taffy_tree(&self) -> &TaffyTree<Context> {
         &self.taffy_tree
     }
 
     /// Retrieve id mapping from [`egui::Id`] to [`NodeId`]
+    #[inline]
     pub fn items(&self) -> &HashMap<egui::Id, NodeId> {
         &self.id_to_node_id
     }
