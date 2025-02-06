@@ -316,7 +316,7 @@ impl Tui {
         }
 
         let container = TaffyContainerUi {
-            layout: self.state.layout(node_id).clone(),
+            layout: *self.state.layout(node_id),
             parent_rect: self.current_rect,
             first_frame,
             sticky,
@@ -795,7 +795,7 @@ impl Tui {
 
         TaffyContainerUi {
             parent_rect: root_rect,
-            layout: self.state.layout(current_node).clone(),
+            layout: *self.state.layout(current_node),
             first_frame: false,
             sticky: egui::Vec2b::FALSE,
             last_scroll_offset: egui::Vec2::ZERO,
