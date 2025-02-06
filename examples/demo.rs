@@ -79,6 +79,13 @@ fn ui_side_panel(ctx: &egui::Context, state: &mut State) {
                 ..Default::default()
             })
             .show(|tui| {
+                tui.heading("Egui Taffy");
+                tui.ui(|ui| {
+                    ui.hyperlink("https://github.com/PPakalns/egui_taffy");
+                });
+
+                tui.separator();
+
                 tui.heading("Demos:");
 
                 for (label, show) in [
