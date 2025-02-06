@@ -6,6 +6,8 @@
 - Added `tui.clickable` to create clickable region
 - Inner code refactored to use non generic inner functions where possible (Idea taken from rust std).
 - Avoid heap allocations during type erasure using `stackbox` crate.
+- Added helper function to access egui_ctx. `tui.egui_ctx()`.
+- Expose reusable function to set up egui style for nodes. (98cdbea12697c8868297f945b2d9dc0cf0839dd0)
 
 ## 0.6
 
