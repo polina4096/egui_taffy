@@ -379,71 +379,43 @@ impl Tui {
         std::mem::swap(&mut current_taffy_container, &mut self.taffy_container);
         let stored_taffy_container = current_taffy_container;
 
-        let mut full_container_max_rect = self.taffy_container.full_container();
-        full_container_max_rect = if full_container_max_rect.any_nan() {
+        let mut full_container_without_border =
+            self.taffy_container.full_container_without_border();
+        full_container_without_border = if full_container_without_border.any_nan() {
             self.current_rect
         } else {
-            full_container_max_rect
+            full_container_without_border
         };
 
         self.current_id = id;
         self.current_node = Some(node_id);
         self.current_node_index = 0;
-        self.current_rect = full_container_max_rect;
+        self.current_rect = full_container_without_border;
+
+        let mut ui_builder = egui::UiBuilder::new()
+            .id_salt(id.with("background"))
+            // This does not set clipping, therefore we can still paint outside child ui
+            // (on border) and avoid initialising two child user interfaces
+            .max_rect(full_container_without_border);
+
+        ui_builder.style = egui_style.clone();
+        ui_builder.layout = layout;
+        ui_builder.disabled = disabled;
+
+        let mut child_ui = self.ui.new_child(ui_builder);
+
+        if let Some(wrap_mode) = wrap_mode {
+            if child_ui.style().wrap_mode != Some(wrap_mode) {
+                child_ui.style_mut().wrap_mode = Some(wrap_mode);
+            }
+        }
 
         let mut bg = match background_draw.simulate_execution_dyn() {
             Some(val) => val,
-            None => {
-                let mut ui_builder = egui::UiBuilder::new()
-                    .id_salt(id.with("background"))
-                    .max_rect(full_container_max_rect);
-
-                ui_builder.style = egui_style.clone();
-                ui_builder.layout = layout;
-
-                let mut child_ui = self.ui.new_child(ui_builder);
-
-                if let Some(wrap_mode) = wrap_mode {
-                    if child_ui.style().wrap_mode != Some(wrap_mode) {
-                        child_ui.style_mut().wrap_mode = Some(wrap_mode);
-                    }
-                }
-
-                if disabled {
-                    // Can not set this in UiBuilder,
-                    // because it does not correctly set up color fade out for
-                    // disabled elements
-                    child_ui.disable();
-                }
-
-                background_draw.draw_dyn(&mut child_ui, &self.taffy_container)
-            }
+            None => background_draw.draw_dyn(&mut child_ui, &self.taffy_container),
         };
 
         let fg = {
-            let full_container_without_border =
-                self.taffy_container.full_container_without_border();
-            let mut ui_builder = egui::UiBuilder::new()
-                .id_salt(id)
-                .max_rect(full_container_without_border);
-            ui_builder.style = egui_style;
-            ui_builder.layout = layout;
-
-            let mut tmp_ui = self.ui.new_child(ui_builder);
-
-            if disabled {
-                // Can not set this in UiBuilder,
-                // because it does not correctly set up color fade out for
-                // disabled elements
-                tmp_ui.disable();
-            }
-
-            if let Some(wrap_mode) = wrap_mode {
-                if tmp_ui.style().wrap_mode != Some(wrap_mode) {
-                    tmp_ui.style_mut().wrap_mode = Some(wrap_mode);
-                }
-            }
-
             let mut scroll_in_directions = egui::Vec2b::FALSE;
             match overflow_style.y {
                 taffy::Overflow::Visible => {
@@ -455,10 +427,10 @@ impl Tui {
                         scroll_in_directions.y = true;
                     }
                     // Hide overflow
-                    let mut clip_rect = tmp_ui.clip_rect();
+                    let mut clip_rect = child_ui.clip_rect();
                     clip_rect.min.y = full_container_without_border.min.y;
                     clip_rect.max.y = full_container_without_border.max.y;
-                    tmp_ui.shrink_clip_rect(clip_rect);
+                    child_ui.shrink_clip_rect(clip_rect);
                 }
             }
 
@@ -473,10 +445,10 @@ impl Tui {
                     }
 
                     // Hide overflow
-                    let mut clip_rect = tmp_ui.clip_rect();
+                    let mut clip_rect = child_ui.clip_rect();
                     clip_rect.min.x = full_container_without_border.min.x;
                     clip_rect.max.x = full_container_without_border.max.x;
-                    tmp_ui.shrink_clip_rect(clip_rect);
+                    child_ui.shrink_clip_rect(clip_rect);
                 }
             }
 
@@ -486,7 +458,7 @@ impl Tui {
                     .max_width(full_container_without_border.width())
                     .min_scrolled_height(full_container_without_border.height())
                     .max_height(full_container_without_border.height())
-                    .show(&mut tmp_ui, |ui| {
+                    .show(&mut child_ui, |ui| {
                         // Allocate expected size for scroll area to correctly calculate inner size
                         let content_size = self.taffy_container.layout.content_size;
                         ui.set_min_size(
@@ -518,9 +490,9 @@ impl Tui {
                     });
                 scroll.inner
             } else {
-                std::mem::swap(&mut tmp_ui, &mut self.ui);
+                std::mem::swap(&mut child_ui, &mut self.ui);
                 let resp = f.show_dyn(self, &mut bg);
-                std::mem::swap(&mut tmp_ui, &mut self.ui);
+                std::mem::swap(&mut child_ui, &mut self.ui);
                 resp
             }
         };
@@ -1411,7 +1383,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             // How to correctly fill space between elements?
             let rect = container.full_container().expand(1.);
 
-            let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+            let _response = ui.interact(rect, ui.id().with("bg"), egui::Sense::click_and_drag());
             // Background is not transparent to events
 
             let visuals = ui.style().visuals.noninteractive();
@@ -1431,7 +1403,8 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
         fn background(ui: &mut egui::Ui, container: &TaffyContainerUi) {
             let rect = container.full_container();
-            let _response = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+
+            let _response = ui.interact(rect, ui.id().with("bg"), egui::Sense::click_and_drag());
             // Background is not transparent to events
 
             let visuals = ui.style().visuals.noninteractive();
@@ -1497,7 +1470,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
         fn background(ui: &mut egui::Ui, container: &TaffyContainerUi) -> Response {
             let rect = container.full_container();
-            ui.allocate_rect(rect, egui::Sense::click())
+            ui.interact(rect, ui.id().with("bg"), egui::Sense::click())
         }
 
         let return_values = tui
@@ -1529,7 +1502,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             target_tint_color: Option<egui::Color32>,
         ) -> Response {
             let rect = container.full_container();
-            let response = ui.allocate_rect(rect, egui::Sense::click());
+            let response = ui.interact(rect, ui.id().with("bg"), egui::Sense::click());
             let visuals = ui.style().interact(&response);
 
             let painter = ui.painter();
@@ -1583,7 +1556,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
         fn background(ui: &mut egui::Ui, container: &TaffyContainerUi, selected: bool) -> Response {
             let rect = container.full_container();
-            let response = ui.allocate_rect(rect, egui::Sense::click());
+            let response = ui.interact(rect, ui.id().with("bg"), egui::Sense::click());
 
             let mut visuals = ui.style().interact_selectable(&response, selected);
 
