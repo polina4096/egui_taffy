@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- Avoid allocating space for widgets where simple `egui::Ui::interact` call is sufficient.
+- Avoid egui::Style clone on every interactive element (button, selectable, clickable, etc.)
+
 ## 0.7.0
 
 - Support egui 0.31

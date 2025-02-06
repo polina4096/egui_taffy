@@ -173,6 +173,12 @@ pub struct Tui {
     limit_scroll_area_size: Option<f32>,
 
     state: ArcMutexGuard<RawMutex, TaffyState>,
+
+    /// Due to how egui style works with deeply nested structures,
+    /// to avoid large amount of [`egui::Style`]` copies
+    /// we can cache some style changes
+    interactive_container_inactive_style_cache:
+        HashMap<(*const egui::Style, InteractiveElementVisualCacheKey), Arc<egui::Style>>,
 }
 
 impl Tui {
@@ -221,16 +227,24 @@ impl Tui {
             limit_scroll_area_size: None,
             last_scroll_offset: egui::Vec2::ZERO,
             state,
+            interactive_container_inactive_style_cache: Default::default(),
         };
 
-        this.tui().id(id).style(style).add(|state| {
+        let res = this.tui().id(id).style(style).add(|state| {
             let resp = f(state);
             let container = state.recalculate();
             TaffyReturn {
                 inner: resp,
                 container,
             }
-        })
+        });
+
+        log::trace!(
+            "Cached {} interactive styles!",
+            this.interactive_container_inactive_style_cache.len()
+        );
+
+        res
     }
 
     /// Set maximal size coefficient of scroll area based on root element size
@@ -393,16 +407,17 @@ impl Tui {
         self.current_rect = full_container_without_border;
 
         let mut ui_builder = egui::UiBuilder::new()
-            .id_salt(id.with("background"))
+            .id_salt(id.with("_ui"))
             // This does not set clipping, therefore we can still paint outside child ui
             // (on border) and avoid initialising two child user interfaces
             .max_rect(full_container_without_border);
 
-        ui_builder.style = egui_style.clone();
+        ui_builder.style = egui_style;
         ui_builder.layout = layout;
         ui_builder.disabled = disabled;
 
         let mut child_ui = self.ui.new_child(ui_builder);
+        child_ui.expand_to_include_rect(full_container_without_border);
 
         if let Some(wrap_mode) = wrap_mode {
             if child_ui.style().wrap_mode != Some(wrap_mode) {
@@ -1863,6 +1878,8 @@ stackbox::custom_dyn! {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 /// Front ui rendering logic
 trait FrontUi<Context, Ret> {
     fn show(self, tui: &mut Tui, bret: &mut Context) -> Ret;
@@ -1886,6 +1903,8 @@ stackbox::custom_dyn! {
         }
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 /// Egui node display trait
 trait EguiUiContainer<Ret> {
@@ -1911,11 +1930,51 @@ stackbox::custom_dyn! {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Hash, PartialEq, Eq)]
+enum InteractiveElementVisualCacheKey {
+    Inactive,
+    Active,
+    Hovered,
+}
+
 /// Helper function to set up tui visuals based on background response interaction state
 pub fn setup_tui_visuals(tui: &mut Tui, bg_response: &Response) {
-    let visuals = *tui.egui_ui().style().interact(bg_response);
-    let egui_style = tui.egui_style_mut();
-    egui_style.interaction.selectable_labels = false;
-    egui_style.visuals.widgets.inactive = visuals;
-    egui_style.visuals.widgets.noninteractive = visuals;
+    let response = bg_response;
+    let style = tui.egui_ui().style().clone();
+    let visuals = &style.visuals.widgets;
+
+    // See `[egui::Visuals::style]`
+    let (cache_key, visuals) = if !response.sense.interactive() {
+        // Nothing to change, fast exit to avoid unnecessary copies of egui::Style
+        (
+            InteractiveElementVisualCacheKey::Inactive,
+            &visuals.inactive,
+        )
+    } else if response.is_pointer_button_down_on() || response.has_focus() || response.clicked() {
+        (InteractiveElementVisualCacheKey::Active, &visuals.active)
+    } else if response.hovered() || response.highlighted() {
+        (InteractiveElementVisualCacheKey::Hovered, &visuals.hovered)
+    } else {
+        // Nothing to change, fast exit to avoid unnecessary copies of egui::Style
+        (
+            InteractiveElementVisualCacheKey::Inactive,
+            &visuals.inactive,
+        )
+    };
+
+    // WARN: Optimization to avoid egui::Style full cloning on every interactive element
+    let cached_style = tui
+        .interactive_container_inactive_style_cache
+        .entry((Arc::as_ptr(&style), cache_key))
+        .or_insert_with(|| {
+            let mut egui_style: egui::Style = style.deref().clone();
+            egui_style.interaction.selectable_labels = false;
+            egui_style.visuals.widgets.inactive = *visuals;
+            egui_style.visuals.widgets.noninteractive = *visuals;
+            Arc::new(egui_style)
+        })
+        .clone();
+    tui.egui_ui_mut().set_style(cached_style);
 }
