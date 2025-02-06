@@ -1418,7 +1418,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             let window_fill = ui.style().visuals.panel_fill;
 
             let painter = ui.painter();
-            painter.rect_filled(rect, visuals.rounding, window_fill);
+            painter.rect_filled(rect, visuals.corner_radius, window_fill);
         }
 
         tui.add_with_background_ui(background, |tui, _| f(tui)).main
@@ -1440,10 +1440,11 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             let painter = ui.painter();
             let stroke = visuals.bg_stroke;
             painter.rect(
-                rect.shrink(stroke.width),
-                visuals.rounding,
+                rect,
+                visuals.corner_radius,
                 window_fill,
                 stroke,
+                egui::StrokeKind::Inside,
             );
         }
 
@@ -1475,8 +1476,12 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
 
             // Background is transparent to events
             let stroke = visuals.bg_stroke;
-            ui.painter()
-                .rect_stroke(rect.shrink(stroke.width), visuals.rounding, stroke);
+            ui.painter().rect_stroke(
+                rect,
+                visuals.corner_radius,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
         }
 
         let return_values = self
@@ -1534,7 +1539,13 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             if let Some(fill) = target_tint_color {
                 bg_fill = egui::ecolor::tint_color_towards(bg_fill, fill);
             }
-            painter.rect(rect.shrink(stroke.width), visuals.rounding, bg_fill, stroke);
+            painter.rect(
+                rect,
+                visuals.corner_radius,
+                bg_fill,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
 
             response
         }
@@ -1584,10 +1595,11 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             let painter = ui.painter();
             let stroke = visuals.bg_stroke;
             painter.rect(
-                rect.shrink(stroke.width),
-                visuals.rounding,
+                rect,
+                visuals.corner_radius,
                 visuals.weak_bg_fill,
                 stroke,
+                egui::StrokeKind::Inside,
             );
 
             response

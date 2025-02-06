@@ -648,7 +648,7 @@ fn grid_sticky(ctx: &egui::Context, state: &mut State) {
                 })
                 .show(|tui| {
                     let style = tui.egui_style_mut();
-                    style.visuals.widgets.noninteractive.rounding = egui::Rounding::ZERO;
+                    style.visuals.widgets.noninteractive.corner_radius = egui::CornerRadius::ZERO;
 
                     let cell_style = taffy::Style {
                         flex_direction: taffy::FlexDirection::Column,

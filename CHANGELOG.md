@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.6.1
+## 0.7.0
 
+- Support egui 0.31
 - Added `tui.clickable` to create clickable region
 - Inner code refactored to use non generic inner functions where possible (Idea taken from rust std).
 - Avoid heap allocations during type erasure using `stackbox` crate.
