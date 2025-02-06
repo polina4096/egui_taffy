@@ -404,7 +404,7 @@ impl Tui {
         self.current_id = id;
         self.current_node = Some(node_id);
         self.current_node_index = 0;
-        self.current_rect = full_container_without_border;
+        self.current_rect = self.taffy_container.full_container();
 
         let mut ui_builder = egui::UiBuilder::new()
             .id_salt(id.with("_ui"))
@@ -1942,7 +1942,7 @@ enum InteractiveElementVisualCacheKey {
 /// Helper function to set up tui visuals based on background response interaction state
 pub fn setup_tui_visuals(tui: &mut Tui, bg_response: &Response) {
     let response = bg_response;
-    let style = tui.egui_ui().style().clone();
+    let style = tui.ui.style();
     let visuals = &style.visuals.widgets;
 
     // See `[egui::Visuals::style]`
@@ -1967,7 +1967,7 @@ pub fn setup_tui_visuals(tui: &mut Tui, bg_response: &Response) {
     // WARN: Optimization to avoid egui::Style full cloning on every interactive element
     let cached_style = tui
         .interactive_container_inactive_style_cache
-        .entry((Arc::as_ptr(&style), cache_key))
+        .entry((Arc::as_ptr(style), cache_key))
         .or_insert_with(|| {
             let mut egui_style: egui::Style = style.deref().clone();
             egui_style.interaction.selectable_labels = false;
