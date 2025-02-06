@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 egui_taffy = { path = "./../../" }
-eframe = { version = "0.30" }
+eframe = { version = "0.31" }
 wasm-bindgen-futures = { version = "0.4" }
