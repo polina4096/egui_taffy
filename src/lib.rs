@@ -551,7 +551,7 @@ impl Tui {
         content: StackBoxDynFnOnceEguiUiContainer<T>,
     ) -> T {
         let fg_bg = self.add_child(params, (), |tui, _| {
-            let taffy_container = tui.taffy_container().clone();
+            let taffy_container = &tui.taffy_container;
 
             let mut ui_builder = UiBuilder::new()
                 .max_rect(taffy_container.full_container_without_border_and_padding());
@@ -560,7 +560,7 @@ impl Tui {
             }
             let mut child_ui = tui.ui.new_child(ui_builder);
 
-            let resp = content.show_dyn(&mut child_ui, &taffy_container);
+            let resp = content.show_dyn(&mut child_ui, taffy_container);
 
             let nodeid = tui.current_node.unwrap();
 
@@ -839,12 +839,11 @@ impl Tui {
     ///
     /// Useful when need to create child nodes with the same style
     #[inline]
-    pub fn current_style(&self) -> taffy::Style {
+    pub fn current_style(&self) -> &taffy::Style {
         self.state
             .taffy_tree
             .style(self.current_node.unwrap())
             .unwrap()
-            .clone()
     }
 
     /// Current Tui UI id
@@ -880,8 +879,8 @@ impl Tui {
 
     /// Retrieve inner state of taffy layout
     #[inline]
-    fn with_state<T>(&self, f: impl FnOnce(&TaffyState) -> T) -> T {
-        f(&self.state)
+    fn taffy_state(&self) -> &TaffyState {
+        &self.state
     }
 
     /// Retrieve taffy id that was used to identify this egui_taffy instance in egui data
@@ -1282,7 +1281,7 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
     /// Set child node style to be the same as current node style
     fn reuse_style(self) -> TuiBuilder<'r> {
         let mut tui = self.tui();
-        tui.params.style = Some(tui.tui.current_style());
+        tui.params.style = Some(tui.tui.current_style().clone());
         tui
     }
 

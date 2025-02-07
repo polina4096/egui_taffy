@@ -25,6 +25,7 @@ pub struct VirtualGridRow {
 
 impl VirtualGridRow {
     /// Retrieve closure that can be used in `tui.mut_style(_)` to set grid_row parameter.
+    #[inline]
     pub fn grid_row_setter(&self) -> impl Fn(&mut taffy::Style) {
         let grid_row = self.grid_row;
         move |style: &mut taffy::Style| {
@@ -33,6 +34,7 @@ impl VirtualGridRow {
     }
 
     /// Retrieve closure that can be used to generate unique ids for elements in the row
+    #[inline]
     pub fn id_gen(&self) -> impl FnMut() -> TuiId {
         let idx = self.idx;
         let mut col_idx = 0;
@@ -85,7 +87,9 @@ impl VirtualGridRowHelper {
             - tui.current_viewport_content().min)
             .y;
 
-        let (top_offset, row_height, gap) = tui.with_state(|state| {
+        let (top_offset, row_height, gap) = {
+            let state = tui.taffy_state();
+
             let style = state.taffy_tree().style(node_id).unwrap();
 
             let gap = match style.gap.height {
@@ -131,7 +135,7 @@ impl VirtualGridRowHelper {
                 }
                 taffy::DetailedLayoutInfo::None => (top_offset, 20., gap),
             }
-        });
+        };
 
         let full_row_height = row_height + gap;
 
