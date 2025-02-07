@@ -305,7 +305,7 @@ impl Tui {
                     //
                     // Because node one by one removal is slow if items have changed their location.
                     // Faster is to remove whole tail.
-                    let mut count = self.state.taffy_tree.child_count(current_node);
+                    let count = self.state.taffy_tree.child_count(current_node);
                     self.state
                         .taffy_tree
                         .remove_children_range(current_node, child_idx..count)
@@ -1397,8 +1397,8 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             let visuals = ui.style().visuals.noninteractive();
             let window_fill = ui.style().visuals.panel_fill;
 
-            let painter = ui.painter();
-            painter.rect_filled(rect, visuals.corner_radius, window_fill);
+            ui.painter()
+                .rect_filled(rect, visuals.corner_radius, window_fill);
         }
 
         tui.add_with_background_ui(background, |tui, _| f(tui)).main
@@ -1418,9 +1418,8 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             let visuals = ui.style().visuals.noninteractive();
             let window_fill = ui.style().visuals.panel_fill;
 
-            let painter = ui.painter();
             let stroke = visuals.bg_stroke;
-            painter.rect(
+            ui.painter().rect(
                 rect,
                 visuals.corner_radius,
                 window_fill,
@@ -1513,14 +1512,13 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
             let response = ui.interact(rect, ui.id().with("bg"), egui::Sense::click());
             let visuals = ui.style().interact(&response);
 
-            let painter = ui.painter();
             let stroke = visuals.bg_stroke;
 
             let mut bg_fill = visuals.weak_bg_fill;
             if let Some(fill) = target_tint_color {
                 bg_fill = egui::ecolor::tint_color_towards(bg_fill, fill);
             }
-            painter.rect(
+            ui.painter().rect(
                 rect,
                 visuals.corner_radius,
                 bg_fill,
@@ -1573,9 +1571,8 @@ pub trait TuiBuilderLogic<'r>: AsTuiBuilder<'r> + Sized {
                 visuals.weak_bg_fill = ui.style().visuals.gray_out(visuals.weak_bg_fill);
             }
 
-            let painter = ui.painter();
             let stroke = visuals.bg_stroke;
-            painter.rect(
+            ui.painter().rect(
                 rect,
                 visuals.corner_radius,
                 visuals.weak_bg_fill,
