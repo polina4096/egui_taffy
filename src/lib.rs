@@ -306,13 +306,10 @@ impl Tui {
                     // Because node one by one removal is slow if items have changed their location.
                     // Faster is to remove whole tail.
                     let mut count = self.state.taffy_tree.child_count(current_node);
-                    while child_idx < count {
-                        count -= 1;
-                        self.state
-                            .taffy_tree
-                            .remove_child_at_index(current_node, count)
-                            .unwrap();
-                    }
+                    self.state
+                        .taffy_tree
+                        .remove_children_range(current_node, child_idx..count)
+                        .unwrap();
 
                     // Add element to the end
                     self.state
@@ -513,13 +510,10 @@ impl Tui {
         };
 
         let mut current_cnt = self.state.taffy_tree.child_count(node_id);
-
-        while current_cnt > self.current_node_index {
-            current_cnt -= 1;
+        if current_cnt > self.current_node_index {
             self.state
                 .taffy_tree
-                .remove_child_at_index(node_id, current_cnt)
-                .unwrap();
+                .remove_children_range(node_id, self.current_node_index..current_cnt);
         }
 
         self.current_id = stored_id;
@@ -681,7 +675,7 @@ impl Tui {
 
         let current_node = self.current_node.unwrap();
 
-        // Remove unused nodes (Removes unused child nodes too )
+        // Remove unused nodes
         let state = self.state.deref_mut();
         state.id_to_node_id.retain(|k, v| {
             if self.used_items.contains(k) {
