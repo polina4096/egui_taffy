@@ -14,7 +14,7 @@ exclude = ["/.github", "./examples/web/"]
 
 [dependencies]
 stackbox = "0.2"
-egui = { version = "0.31", default-features = false }
+egui = { git = "https://github.com/polina4096/egui", default-features = false }
 log = { version = "0.4", default-features = false }
 taffy = { version = "0.7.5", default-features = false, features = [
   "taffy_tree",
